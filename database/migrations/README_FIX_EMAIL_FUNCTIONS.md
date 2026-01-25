@@ -1,44 +1,85 @@
-# Fix Email Encryption Functions - Quick Guide
+# Fix Email Accounts System - Complete Guide
 
 ## Problem
-Error: `Could not find the function public.encrypt_email_password(password) in the schema cache`
+Two related errors when trying to create email accounts:
+1. `Could not find the table 'public.email_accounts' in the schema cache`
+2. `Could not find the function public.encrypt_email_password(password) in the schema cache`
 
-This happens when trying to create email accounts because the encryption functions from migration 004 were never applied to the production database.
+This happens because migration 004 was never applied to the production database.
 
-## Solution - Run SQL in Supabase
+## Solution - Run COMPLETE Fix SQL in Supabase (RECOMMENDED)
 
-### Step 1: Open Supabase SQL Editor
+### Option A: Run Complete Fix (RECOMMENDED)
+
+This single SQL file creates everything you need:
+- `email_accounts` table
+- Encryption functions with correct signature
+- RLS policies
+- Indexes
+
+**Steps:**
 1. Go to https://supabase.com/dashboard/project/thaobumtmokgayljvlgn
 2. Click **SQL Editor** in the left sidebar
 3. Click **New Query**
+4. Copy the **entire contents** of `FIX_COMPLETE_email_accounts.sql`
+5. Paste and click **Run**
+6. Verify all verification queries pass at the bottom
 
-### Step 2: Copy and Run This SQL
+**File:** `FIX_COMPLETE_email_accounts.sql`
+
+---
+
+### Option B: Run Only Encryption Functions (If table already exists)
+
+If you already have the `email_accounts` table but just need the encryption functions:
+
+**Steps:**
+1. Open Supabase SQL Editor
+2. Copy and run the SQL below
+
+**IMPORTANT:** This version is compatible with Supabase RPC calls.
 
 ```sql
 -- Enable pgcrypto extension (required for encryption)
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- Encryption function for email passwords
-CREATE OR REPLACE FUNCTION public.encrypt_email_password(password TEXT, key TEXT DEFAULT 'banxway_email_key_dev')
-RETURNS TEXT AS $$
-BEGIN
-  RETURN encode(pgp_sym_encrypt(password, key), 'base64');
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- Drop existing functions if any (cleanup)
+DROP FUNCTION IF EXISTS public.encrypt_email_password(TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.encrypt_email_password(TEXT);
+DROP FUNCTION IF EXISTS public.decrypt_email_password(TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.decrypt_email_password(TEXT);
 
--- Decryption function for email passwords
-CREATE OR REPLACE FUNCTION public.decrypt_email_password(encrypted TEXT, key TEXT DEFAULT 'banxway_email_key_dev')
-RETURNS TEXT AS $$
+-- Encryption function (Supabase RPC compatible)
+CREATE OR REPLACE FUNCTION public.encrypt_email_password(password TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  encryption_key TEXT := 'banxway_email_key_prod_2024';
 BEGIN
-  RETURN pgp_sym_decrypt(decode(encrypted, 'base64'), key);
+  RETURN encode(pgp_sym_encrypt(password, encryption_key), 'base64');
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+
+-- Decryption function (Supabase RPC compatible)
+CREATE OR REPLACE FUNCTION public.decrypt_email_password(encrypted TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  encryption_key TEXT := 'banxway_email_key_prod_2024';
+BEGIN
+  RETURN pgp_sym_decrypt(decode(encrypted, 'base64'), encryption_key);
+END;
+$$;
 
 -- Grant execute permissions
-GRANT EXECUTE ON FUNCTION public.encrypt_email_password(TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.encrypt_email_password(TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.decrypt_email_password(TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.decrypt_email_password(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.encrypt_email_password(TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION public.decrypt_email_password(TEXT) TO anon;
 ```
 
 ### Step 3: Verify Functions Were Created
