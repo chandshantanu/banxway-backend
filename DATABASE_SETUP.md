@@ -363,7 +363,9 @@ DELETE FROM schema_migrations WHERE migration_name = '005_failed.sql';
 | `001_initial_schema.sql` | Core tables (users, threads, messages, shipments) | 2026-01-20 | ✅ Applied |
 | `002_add_sms_and_transcription.sql` | SMS and call transcription support | 2026-01-21 | ✅ Applied |
 | `003_role_based_rls_policies.sql` | Row-level security policies | 2026-01-22 | ✅ Applied |
-| `004_email_accounts.sql` | Multi-inbox email account management | 2026-01-24 | ⏳ Pending |
+| `004_email_accounts.sql` | Multi-inbox email account management | 2026-01-24 | ✅ Applied |
+| `005_notifications.sql` | User notifications system with 8 notification types | 2026-01-25 | ✅ Applied |
+| `006_integrations.sql` | Integration credentials storage (Exotel, Zoho) and phone numbers | 2026-01-25 | ⏳ Pending |
 
 ---
 
