@@ -54,3 +54,11 @@ temp/
 Thumbs.db
 .vercel
 .azure/main.parameters.json
+
+# Secrets and credentials
+CREDENTIALS.md
+secrets/
+.secrets/
+*.pem
+*.key
+*.cert
