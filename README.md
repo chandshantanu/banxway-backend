@@ -277,6 +277,27 @@ GET    /analytics/threads                         # Thread analytics
 GET    /analytics/users                           # User performance
 ```
 
+### Settings
+
+```
+GET    /settings                                   # Settings overview
+GET    /settings/configuration-status              # Check what's configured
+
+GET    /settings/email-accounts                    # List email accounts
+POST   /settings/email-accounts                    # Add email account
+PATCH  /settings/email-accounts/:id                # Update account
+DELETE /settings/email-accounts/:id                # Delete account
+
+GET    /settings/integrations                      # List integrations
+GET    /settings/integrations/:type                # Get integration
+POST   /settings/integrations/:type                # Configure integration
+POST   /settings/integrations/:type/test           # Test connection
+DELETE /settings/integrations/:type                # Delete integration
+
+GET    /settings/phone-numbers                     # List phone numbers
+POST   /settings/phone-numbers/:id/assign          # Assign to user
+```
+
 ## 🔌 WebSocket Events
 
 ### Client → Server
