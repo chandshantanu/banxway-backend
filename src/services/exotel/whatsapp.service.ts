@@ -17,7 +17,7 @@ export class ExotelWhatsAppService {
     this.client = axios.create({
       baseURL: this.baseUrl,
       auth: {
-        username: exotelConfig.sid,
+        username: exotelConfig.apiKey,
         password: exotelConfig.token,
       },
       headers: {
@@ -173,6 +173,102 @@ export class ExotelWhatsAppService {
         to: params.to,
       });
       throw new Error(`Failed to send WhatsApp document: ${error.message}`);
+    }
+  }
+
+  /**
+   * Send audio via WhatsApp
+   */
+  async sendAudio(params: {
+    to: string;
+    audioUrl: string;
+    customData?: string;
+  }): Promise<any> {
+    try {
+      const payload = {
+        custom_data: params.customData,
+        whatsapp: {
+          messages: [
+            {
+              from: this.whatsappNumber,
+              to: params.to,
+              content: {
+                type: 'audio',
+                audio: {
+                  link: params.audioUrl,
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      const response = await this.client.post(
+        `/v2/accounts/${this.accountSid}/messages`,
+        payload
+      );
+
+      logger.info('WhatsApp audio sent', {
+        messageSid: response.data.sid,
+        to: params.to,
+      });
+
+      return response.data;
+    } catch (error: any) {
+      logger.error('Failed to send WhatsApp audio', {
+        error: error.message,
+        to: params.to,
+      });
+      throw new Error(`Failed to send WhatsApp audio: ${error.message}`);
+    }
+  }
+
+  /**
+   * Send video via WhatsApp
+   */
+  async sendVideo(params: {
+    to: string;
+    videoUrl: string;
+    caption?: string;
+    customData?: string;
+  }): Promise<any> {
+    try {
+      const payload = {
+        custom_data: params.customData,
+        whatsapp: {
+          messages: [
+            {
+              from: this.whatsappNumber,
+              to: params.to,
+              content: {
+                type: 'video',
+                video: {
+                  link: params.videoUrl,
+                  caption: params.caption,
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      const response = await this.client.post(
+        `/v2/accounts/${this.accountSid}/messages`,
+        payload
+      );
+
+      logger.info('WhatsApp video sent', {
+        messageSid: response.data.sid,
+        to: params.to,
+      });
+
+      return response.data;
+    } catch (error: any) {
+      logger.error('Failed to send WhatsApp video', {
+        error: error.message,
+        to: params.to,
+      });
+      throw new Error(`Failed to send WhatsApp video: ${error.message}`);
     }
   }
 
