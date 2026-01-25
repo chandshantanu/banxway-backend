@@ -15,7 +15,7 @@ export class ExotelTelephonyService {
     this.client = axios.create({
       baseURL: this.baseUrl,
       auth: {
-        username: exotelConfig.sid,
+        username: exotelConfig.apiKey,
         password: exotelConfig.token,
       },
       headers: {

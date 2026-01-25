@@ -6,11 +6,26 @@ dotenv.config();
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
-// Redis connection for BullMQ
-export const redisConnection = new Redis(redisUrl, {
+// Parse Redis URL and configure TLS for Azure Redis
+const redisOptions: any = {
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
-});
+  retryDelayOnFailover: 100,
+  retryDelayOnClusterDown: 100,
+  retryDelayOnTryAgain: 100,
+  connectTimeout: 10000,
+  commandTimeout: 5000,
+};
+
+// If using Azure Redis with TLS (rediss://)
+if (redisUrl.startsWith('rediss://')) {
+  redisOptions.tls = {
+    rejectUnauthorized: false, // Accept Azure's self-signed cert
+  };
+}
+
+// Redis connection for BullMQ
+export const redisConnection = new Redis(redisUrl, redisOptions);
 
 // Define queues
 export const emailQueue = new Queue('email-processing', {

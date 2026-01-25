@@ -324,7 +324,7 @@ router.post('/execute', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const data = validateRequest(startWorkflowSchema, req.body);
 
-    const instance = await workflowEngine.startWorkflow(data);
+    const instance = await workflowEngine.startWorkflow(data as any);
 
     const response: ApiResponse = {
       success: true,
@@ -426,7 +426,7 @@ router.post('/match', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const data = validateRequest(matchWorkflowSchema, req.body);
 
-    const matches = await workflowMatcher.matchWorkflow(data);
+    const matches = await workflowMatcher.matchWorkflow(data as any);
 
     const response: ApiResponse = {
       success: true,

@@ -1,11 +1,12 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { AuthenticatedRequest } from '../../../middleware/auth.middleware';
+import { AuthenticatedRequest, requirePermission } from '../../../middleware/auth.middleware';
 import threadRepository from '../../../database/repositories/thread.repository';
 import { validateRequest, paginationSchema } from '../../../utils/validation';
 import { ApiResponse, ThreadType, Priority, Channel, ThreadStatus, CreateThreadRequest } from '../../../types';
 import { logger } from '../../../utils/logger';
 import { io } from '../../../index';
+import { Permission } from '../../../utils/permissions';
 
 const router = Router();
 
@@ -46,7 +47,7 @@ const threadFiltersSchema = z.object({
 });
 
 // GET /api/v1/communications/threads - List threads
-router.get('/', async (req: AuthenticatedRequest, res: Response) => {
+router.get('/', requirePermission(Permission.VIEW_THREADS), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const pagination = validateRequest(paginationSchema, req.query);
     const filters = validateRequest(threadFiltersSchema, req.query);
@@ -72,7 +73,7 @@ router.get('/', async (req: AuthenticatedRequest, res: Response) => {
 });
 
 // POST /api/v1/communications/threads - Create thread
-router.post('/', async (req: AuthenticatedRequest, res: Response) => {
+router.post('/', requirePermission(Permission.CREATE_THREADS), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const data = validateRequest(createThreadSchema, req.body) as CreateThreadRequest;
     const userId = req.user!.id;
@@ -95,7 +96,7 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
 });
 
 // GET /api/v1/communications/threads/:id - Get thread
-router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
+router.get('/:id', requirePermission(Permission.VIEW_THREADS), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const thread = await threadRepository.findById(req.params.id);
 
@@ -112,7 +113,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
 });
 
 // PATCH /api/v1/communications/threads/:id - Update thread
-router.patch('/:id', async (req: AuthenticatedRequest, res: Response) => {
+router.patch('/:id', requirePermission(Permission.ASSIGN_THREADS, Permission.CLOSE_THREADS), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const updates = validateRequest(updateThreadSchema, req.body);
     const thread = await threadRepository.update(req.params.id, updates);
@@ -133,7 +134,7 @@ router.patch('/:id', async (req: AuthenticatedRequest, res: Response) => {
 });
 
 // DELETE /api/v1/communications/threads/:id - Delete (archive) thread
-router.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
+router.delete('/:id', requirePermission(Permission.DELETE_THREADS), async (req: AuthenticatedRequest, res: Response) => {
   try {
     // Soft delete by archiving
     await threadRepository.update(req.params.id, { archived: true });
@@ -151,7 +152,7 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
 });
 
 // POST /api/v1/communications/threads/:id/follow - Follow thread
-router.post('/:id/follow', async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:id/follow', requirePermission(Permission.VIEW_THREADS), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     await threadRepository.addFollower(req.params.id, userId);
@@ -169,7 +170,7 @@ router.post('/:id/follow', async (req: AuthenticatedRequest, res: Response) => {
 });
 
 // POST /api/v1/communications/threads/:id/unfollow - Unfollow thread
-router.post('/:id/unfollow', async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:id/unfollow', requirePermission(Permission.VIEW_THREADS), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     await threadRepository.removeFollower(req.params.id, userId);
@@ -187,7 +188,7 @@ router.post('/:id/unfollow', async (req: AuthenticatedRequest, res: Response) =>
 });
 
 // POST /api/v1/communications/threads/:id/link-shipment - Link shipment
-router.post('/:id/link-shipment', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.post('/:id/link-shipment', requirePermission(Permission.ASSIGN_THREADS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { shipment_id } = req.body;
 
@@ -217,7 +218,7 @@ router.post('/:id/link-shipment', async (req: AuthenticatedRequest, res: Respons
 });
 
 // GET /api/v1/communications/threads/search - Search threads
-router.get('/search', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get('/search', requirePermission(Permission.VIEW_THREADS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { q } = req.query;
 

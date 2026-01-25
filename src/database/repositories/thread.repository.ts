@@ -31,7 +31,21 @@ export class ThreadRepository {
 
     let query = supabaseAdmin
       .from('communication_threads')
-      .select('*', { count: 'exact' });
+      .select(`
+        *,
+        customers (
+          id,
+          name,
+          email,
+          phone,
+          company
+        ),
+        users!communication_threads_assigned_to_fkey (
+          id,
+          full_name,
+          email
+        )
+      `, { count: 'exact' });
 
     // Apply filters
     if (status && status.length > 0) {
@@ -110,7 +124,35 @@ export class ThreadRepository {
   async findById(id: string): Promise<CommunicationThread> {
     const { data, error } = await supabaseAdmin
       .from('communication_threads')
-      .select('*')
+      .select(`
+        *,
+        customers (
+          id,
+          name,
+          email,
+          phone,
+          company
+        ),
+        users!communication_threads_assigned_to_fkey (
+          id,
+          full_name,
+          email
+        ),
+        communication_messages (
+          id,
+          direction,
+          channel,
+          content,
+          subject,
+          sender_type,
+          sender_id,
+          recipient_type,
+          recipient_id,
+          status,
+          created_at,
+          attachments
+        )
+      `)
       .eq('id', id)
       .single();
 

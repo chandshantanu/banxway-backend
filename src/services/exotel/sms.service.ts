@@ -12,12 +12,12 @@ export class ExotelSMSService {
   constructor() {
     this.accountSid = exotelConfig.sid;
     this.baseUrl = exotelConfig.apiUrl;
-    this.smsNumber = process.env.EXOTEL_SMS_NUMBER || exotelConfig.whatsappNumber;
+    this.smsNumber = process.env.EXOTEL_SMS_NUMBER || exotelConfig.smsNumber;
 
     this.client = axios.create({
       baseURL: this.baseUrl,
       auth: {
-        username: exotelConfig.sid,
+        username: exotelConfig.apiKey,
         password: exotelConfig.token,
       },
       headers: {

@@ -115,11 +115,21 @@ async function startServer() {
       logger.info('Database connection successful');
     }
 
-    // Test Redis connection
-    logger.info('Testing Redis connection...');
-    const { redisConnection } = require('./config/redis.config');
-    await redisConnection.ping();
-    logger.info('Redis connection successful');
+    // Test Redis connection (non-blocking)
+    let redisConnected = false;
+    try {
+      logger.info('Testing Redis connection...');
+      const { redisConnection } = require('./config/redis.config');
+      await Promise.race([
+        redisConnection.ping(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Redis connection timeout')), 10000))
+      ]);
+      logger.info('Redis connection successful');
+      redisConnected = true;
+    } catch (redisError: any) {
+      logger.warn('Redis connection failed (non-fatal)', { error: redisError.message });
+      logger.warn('Background workers will be disabled');
+    }
 
     // Start HTTP server
     httpServer.listen(PORT, () => {
@@ -128,15 +138,18 @@ async function startServer() {
       logger.info(`🔗 API: http://localhost:${PORT}/api/v1`);
       logger.info(`📡 WebSocket: ws://localhost:${PORT}`);
       logger.info(`❤️  Health: http://localhost:${PORT}/health`);
+      logger.info(`📊 Redis: ${redisConnected ? 'Connected' : 'Not connected (workers disabled)'}`);
     });
 
-    // Start background workers
-    if (process.env.ENABLE_WORKERS !== 'false') {
+    // Start background workers only if Redis is connected
+    if (redisConnected && process.env.ENABLE_WORKERS !== 'false') {
       logger.info('Starting background workers...');
       require('./workers/email-poller.worker');
       require('./workers/whatsapp-processor.worker');
       require('./workers/sla-checker.worker');
       logger.info('Background workers started');
+    } else if (!redisConnected) {
+      logger.info('Background workers disabled (Redis not available)');
     }
 
   } catch (error: any) {

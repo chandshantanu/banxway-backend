@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/database.config';
 import { UnauthorizedError, ForbiddenError } from '../types';
 import { logger } from '../utils/logger';
+import { Permission, hasPermission, UserRole } from '../utils/permissions';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -90,6 +91,74 @@ export function requireRole(...allowedRoles: string[]) {
           requiredRoles: allowedRoles,
         });
         throw new ForbiddenError('Insufficient permissions');
+      }
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+/**
+ * Permission-based middleware - checks if user has specific permission
+ */
+export function requirePermission(...permissions: Permission[]) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+    try {
+      if (!req.user) {
+        throw new UnauthorizedError('Not authenticated');
+      }
+
+      // Check if user has at least one of the required permissions
+      const hasRequiredPermission = permissions.some(permission =>
+        hasPermission(req.user!.role, permission)
+      );
+
+      if (!hasRequiredPermission) {
+        logger.warn('Insufficient permissions', {
+          userId: req.user.id,
+          userRole: req.user.role,
+          requiredPermissions: permissions,
+        });
+        throw new ForbiddenError('You do not have permission to perform this action');
+      }
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+/**
+ * Check if user has minimum role level
+ */
+export function requireMinRole(minRole: UserRole) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+    try {
+      if (!req.user) {
+        throw new UnauthorizedError('Not authenticated');
+      }
+
+      const roleHierarchy: Record<UserRole, number> = {
+        [UserRole.VIEWER]: 1,
+        [UserRole.SUPPORT]: 2,
+        [UserRole.VALIDATOR]: 3,
+        [UserRole.MANAGER]: 4,
+        [UserRole.ADMIN]: 5,
+      };
+
+      const userRoleLevel = roleHierarchy[req.user.role as UserRole] || 0;
+      const minRoleLevel = roleHierarchy[minRole];
+
+      if (userRoleLevel < minRoleLevel) {
+        logger.warn('Insufficient role level', {
+          userId: req.user.id,
+          userRole: req.user.role,
+          requiredMinRole: minRole,
+        });
+        throw new ForbiddenError('Insufficient role permissions');
       }
 
       next();

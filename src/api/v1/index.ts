@@ -9,6 +9,8 @@ import notificationsRouter from './notifications';
 import analyticsRouter from './analytics';
 import documentsRouter from './documents';
 import webhooksRouter from './webhooks';
+import settingsRouter from './settings';
+import queueRouter from './queue';
 import testWebhooksRouter from './test/webhooks';
 
 const router = Router();
@@ -24,11 +26,23 @@ router.use('/notifications', notificationsRouter);
 router.use('/analytics', analyticsRouter);
 router.use('/documents', documentsRouter);
 router.use('/webhooks', webhooksRouter);
+router.use('/settings', settingsRouter);
+router.use('/queue', queueRouter);
 
 // Test endpoints (development only)
 if (process.env.NODE_ENV !== 'production') {
   router.use('/test/webhooks', testWebhooksRouter);
 }
+
+// Health check endpoint
+router.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    version: '1.0.0',
+  });
+});
 
 // API info endpoint
 router.get('/', (req, res) => {
@@ -43,6 +57,8 @@ router.get('/', (req, res) => {
     analytics: '/api/v1/analytics',
     documents: '/api/v1/documents',
     webhooks: '/api/v1/webhooks',
+    settings: '/api/v1/settings',
+    queue: '/api/v1/queue',
   };
 
   if (process.env.NODE_ENV !== 'production') {

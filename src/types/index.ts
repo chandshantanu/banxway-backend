@@ -568,3 +568,6 @@ export class ForbiddenError extends ApiError {
     this.name = 'ForbiddenError';
   }
 }
+
+// Re-export workflow types
+export * from './workflow';

@@ -52,3 +52,5 @@ temp/
 
 # OS files
 Thumbs.db
+.vercel
+.azure/main.parameters.json

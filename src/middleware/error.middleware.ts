@@ -8,14 +8,33 @@ export function errorHandler(
   res: Response,
   next: NextFunction
 ): void {
-  // Log error
+  // Extract user info if available
+  const user = (req as any).user;
+
+  // Log error with comprehensive context
   logger.error('Error occurred', {
-    error: error.message,
-    stack: error.stack,
-    path: req.path,
-    method: req.method,
-    body: req.body,
-    query: req.query,
+    error: {
+      message: error.message,
+      name: error.name,
+      stack: process.env.NODE_ENV === 'production' ? undefined : error.stack,
+    },
+    request: {
+      path: req.path,
+      method: req.method,
+      headers: {
+        'user-agent': req.headers['user-agent'],
+        'content-type': req.headers['content-type'],
+      },
+      body: process.env.NODE_ENV === 'production' ? undefined : req.body,
+      query: req.query,
+      params: req.params,
+    },
+    user: user ? {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    } : undefined,
+    timestamp: new Date().toISOString(),
   });
 
   // Handle ApiError

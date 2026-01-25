@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authenticateRequest, AuthenticatedRequest } from '../../../middleware/auth.middleware';
+import { authenticateRequest, AuthenticatedRequest, requirePermission } from '../../../middleware/auth.middleware';
 import { supabaseAdmin } from '../../../config/database.config';
 import exotelSMS from '../../../services/exotel/sms.service';
 import exotelWhatsApp from '../../../services/exotel/whatsapp.service';
@@ -8,6 +8,7 @@ import emailSender from '../../../services/email/email-sender.service';
 import { logger } from '../../../utils/logger';
 import { io } from '../../../index';
 import { exotelConfig, EXOTEL_WEBHOOK_BASE_URL } from '../../../config/exotel.config';
+import { Permission } from '../../../utils/permissions';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ const router = Router();
  * Get messages for a thread
  * GET /api/v1/communications/messages?threadId=xxx&limit=50&offset=0
  */
-router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get('/', requirePermission(Permission.VIEW_THREADS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { threadId, limit = 50, offset = 0 } = req.query;
 
@@ -79,7 +80,7 @@ router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> 
  * Send SMS message
  * POST /api/v1/communications/messages/send-sms
  */
-router.post('/send-sms', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.post('/send-sms', requirePermission(Permission.SEND_MESSAGES), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { threadId, to, body, priority } = req.body;
 
@@ -175,7 +176,7 @@ router.post('/send-sms', async (req: AuthenticatedRequest, res: Response): Promi
  * Send WhatsApp message
  * POST /api/v1/communications/messages/send-whatsapp
  */
-router.post('/send-whatsapp', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.post('/send-whatsapp', requirePermission(Permission.SEND_MESSAGES), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { threadId, to, text, mediaUrl, mediaType } = req.body;
 
@@ -291,7 +292,7 @@ router.post('/send-whatsapp', async (req: AuthenticatedRequest, res: Response): 
  * Make voice call
  * POST /api/v1/communications/messages/make-call
  */
-router.post('/make-call', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.post('/make-call', requirePermission(Permission.SEND_MESSAGES), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { threadId, to, from } = req.body;
 
@@ -392,7 +393,7 @@ router.post('/make-call', async (req: AuthenticatedRequest, res: Response): Prom
  * Send email
  * POST /api/v1/communications/messages/send-email
  */
-router.post('/send-email', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.post('/send-email', requirePermission(Permission.SEND_MESSAGES), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const {
       threadId,
@@ -521,7 +522,7 @@ router.post('/send-email', async (req: AuthenticatedRequest, res: Response): Pro
  * Update message
  * PATCH /api/v1/communications/messages/:id
  */
-router.patch('/:id', async (req: AuthenticatedRequest, res: Response) => {
+router.patch('/:id', requirePermission(Permission.SEND_MESSAGES), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -559,7 +560,7 @@ router.patch('/:id', async (req: AuthenticatedRequest, res: Response) => {
  * Delete message (soft delete)
  * DELETE /api/v1/communications/messages/:id
  */
-router.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
+router.delete('/:id', requirePermission(Permission.DELETE_THREADS), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
 

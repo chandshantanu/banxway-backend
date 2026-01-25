@@ -281,6 +281,146 @@ if (process.env.NODE_ENV !== 'production') {
       });
     }
   });
+
+  /**
+   * Seed test data for local development
+   * POST /api/v1/test/webhooks/seed
+   */
+  router.post('/seed', async (req: Request, res: Response) => {
+    try {
+      const { supabaseAdmin } = await import('../../../config/database.config');
+
+      // Create a test customer if not exists
+      const { data: existingCustomer } = await supabaseAdmin
+        .from('customers')
+        .select('id')
+        .eq('email', 'test@acmecorp.com')
+        .single();
+
+      let customerId = existingCustomer?.id;
+
+      if (!customerId) {
+        const { data: newCustomer } = await supabaseAdmin
+          .from('customers')
+          .insert({
+            name: 'Acme Corporation',
+            email: 'test@acmecorp.com',
+            phone: '+919876543210',
+            company_name: 'Acme Corporation',
+          })
+          .select('id')
+          .single();
+        customerId = newCustomer?.id;
+      }
+
+      // Create test threads and messages for each channel
+      const channels = [
+        { channel: 'EMAIL', from: 'john.smith@acmecorp.com', subject: 'Urgent: Customs clearance issue' },
+        { channel: 'EMAIL', from: 'sarah.chen@globaltech.com', subject: 'Quote request - Air freight to Sydney' },
+        { channel: 'EMAIL', from: 'mike.johnson@fastship.com', subject: 'Re: Shipment SHP-20260112-A1B2' },
+        { channel: 'WHATSAPP', from: '+919876543210', subject: 'Need update on Dubai shipment' },
+        { channel: 'WHATSAPP', from: '+918765432109', subject: 'Documents ready for collection' },
+        { channel: 'VOICE', from: '+917654321098', subject: 'Call regarding shipment status' },
+        { channel: 'SMS', from: '+916543210987', subject: 'Where is my shipment?' },
+      ];
+
+      const createdThreads: any[] = [];
+
+      for (const item of channels) {
+        // Create thread
+        const { data: thread, error: threadError } = await supabaseAdmin
+          .from('communication_threads')
+          .insert({
+            customer_id: customerId,
+            primary_channel: item.channel,
+            subject: item.subject,
+            status: 'NEW',
+            priority: item.subject.toLowerCase().includes('urgent') ? 'HIGH' : 'MEDIUM',
+          })
+          .select('id')
+          .single();
+
+        if (threadError) {
+          logger.error('Error creating test thread', { error: threadError });
+          continue;
+        }
+
+        // Create message
+        const { data: message, error: messageError } = await supabaseAdmin
+          .from('communication_messages')
+          .insert({
+            thread_id: thread.id,
+            channel: item.channel,
+            direction: 'INBOUND',
+            from_address: item.from,
+            to_address: process.env.SMTP_USER || 'support@banxway.com',
+            subject: item.subject,
+            body_text: `Test message body for: ${item.subject}`,
+            body_html: `<p>Test message body for: ${item.subject}</p>`,
+            is_read: false,
+          })
+          .select('id')
+          .single();
+
+        if (messageError) {
+          logger.error('Error creating test message', { error: messageError });
+        }
+
+        createdThreads.push({
+          threadId: thread.id,
+          messageId: message?.id,
+          channel: item.channel,
+          subject: item.subject,
+        });
+      }
+
+      res.json({
+        success: true,
+        message: `Created ${createdThreads.length} test threads with messages`,
+        data: {
+          customerId,
+          threads: createdThreads,
+        },
+      });
+    } catch (error: any) {
+      logger.error('Seed test data failed', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  });
+
+  /**
+   * Clear test data
+   * DELETE /api/v1/test/webhooks/seed
+   */
+  router.delete('/seed', async (req: Request, res: Response) => {
+    try {
+      const { supabaseAdmin } = await import('../../../config/database.config');
+
+      // Delete test customer and cascade will handle threads/messages
+      const { error } = await supabaseAdmin
+        .from('customers')
+        .delete()
+        .eq('email', 'test@acmecorp.com');
+
+      if (error) {
+        throw error;
+      }
+
+      res.json({
+        success: true,
+        message: 'Test data cleared',
+      });
+    } catch (error: any) {
+      logger.error('Clear test data failed', { error: error.message });
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  });
 }
 
 export default router;

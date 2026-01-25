@@ -158,7 +158,7 @@ export class HuggingFaceService {
 
       // Result is a multi-dimensional array, flatten to 1D
       if (Array.isArray(result) && Array.isArray(result[0])) {
-        return result[0];
+        return result[0] as number[];
       }
 
       return result as number[];
@@ -188,7 +188,7 @@ export class HuggingFaceService {
         inputs: text,
       });
 
-      return result.translation_text;
+      return (result as any).translation_text;
     } catch (error: any) {
       console.error('Hugging Face translation error:', error.message);
       throw new Error(`Translation error: ${error.message}`);

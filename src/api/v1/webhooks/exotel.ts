@@ -9,25 +9,56 @@ import { supabaseAdmin } from '../../../config/database.config';
 import threadRepository from '../../../database/repositories/thread.repository';
 import { io } from '../../../index';
 import { queueTranscription } from '../../../workers/transcription.worker';
+import { verifyExotelWebhook, logWebhookRequest } from '../../../middleware/exotel-webhook-auth.middleware';
 
 const router = Router();
+
+// Apply webhook logging and verification middleware
+router.use(logWebhookRequest);
+router.use(verifyExotelWebhook);
 
 /**
  * Exotel Call Webhook Handler
  * Endpoint: POST /api/v1/webhooks/exotel/call
  */
 router.post('/call', async (req: Request, res: Response) => {
+  let webhookLogId: string | null = null;
+
   try {
     const payload: ExotelWebhookPayload = req.body;
+
+    // Log webhook to database
+    const { data: webhookLog } = await supabaseAdmin
+      .from('webhook_logs')
+      .insert({
+        webhook_type: 'call',
+        payload: payload,
+        headers: req.headers,
+        external_id: payload.CallSid,
+        processed: false,
+      })
+      .select('id')
+      .single();
+
+    webhookLogId = webhookLog?.id;
 
     logger.info('Received Exotel call webhook', {
       callSid: payload.CallSid,
       status: payload.CallStatus,
       direction: payload.Direction,
+      webhookLogId,
     });
 
     // Process the webhook
     await processCallWebhook(payload);
+
+    // Mark webhook as processed
+    if (webhookLogId) {
+      await supabaseAdmin
+        .from('webhook_logs')
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq('id', webhookLogId);
+    }
 
     // Always respond 200 to acknowledge receipt
     res.status(200).json({ success: true, message: 'Webhook received' });
@@ -36,6 +67,17 @@ router.post('/call', async (req: Request, res: Response) => {
       error: error.message,
       body: req.body,
     });
+
+    // Mark webhook as failed
+    if (webhookLogId) {
+      await supabaseAdmin
+        .from('webhook_logs')
+        .update({
+          error: error.message,
+          processed_at: new Date().toISOString(),
+        })
+        .eq('id', webhookLogId);
+    }
 
     // Still return 200 to prevent retries
     res.status(200).json({ success: false, error: error.message });
