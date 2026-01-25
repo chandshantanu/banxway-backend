@@ -12,7 +12,8 @@
     "test:coverage": "jest --coverage",
     "lint": "eslint src --ext .ts",
     "type-check": "tsc --noEmit",
-    "migrate": "ts-node scripts/migrate.ts",
+    "migrate": "node migrate-all.js",
+    "migrate:prod": "echo 'Set DATABASE_URL env var and run: node migrate-all.js'",
     "seed": "ts-node scripts/seed.ts"
   },
   "keywords": [
