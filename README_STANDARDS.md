@@ -6,7 +6,11 @@ Complete reference guide for all development standards, procedures, and document
 
 ## Documentation Structure
 
-This project maintains comprehensive documentation for consistent development practices:
+This project maintains comprehensive documentation for consistent development practices.
+
+**⭐ IMPORTANT:** All documentation must be kept up-to-date. See the "Documentation Workflow" section in both CLAUDE.md files for detailed update procedures.
+
+### Documentation Locations
 
 ### 🔐 Credentials & Secrets
 
@@ -244,6 +248,55 @@ banxway-platform/
             ├── auth-context.tsx
             └── query-provider.tsx
 ```
+
+---
+
+## Documentation Update Workflow
+
+### ⭐ CRITICAL: Always Update Documentation
+
+**When you make changes, update documentation BEFORE committing:**
+
+1. **Added a database table?**
+   - ✅ Update `DATABASE_SETUP.md` (add to migrations table)
+   - ✅ Create migration in `database/migrations/`
+   - ✅ Update `MIGRATION_QUERIES.md` if complex
+
+2. **Added an API endpoint?**
+   - ✅ Update backend `CLAUDE.md` (API response standards)
+   - ✅ Update backend `README.md` (endpoints list)
+
+3. **Added a frontend component/page?**
+   - ✅ Update frontend `CLAUDE.md` (component architecture)
+   - ✅ Add JSDoc comments to component
+   - ✅ Update frontend `README.md` (routes list)
+
+4. **Created a new feature?**
+   - ✅ Create `[FEATURE]_SETUP.md` guide
+   - ✅ Update both CLAUDE.md files with new patterns
+   - ✅ Update `README_STANDARDS.md` (this file)
+
+5. **Added environment variables?**
+   - ✅ Update `CREDENTIALS.md` (actual values, gitignored)
+   - ✅ Update `.env.example` files
+   - ✅ Update CLAUDE.md (environment variables section)
+
+### Documentation Review Checklist
+
+**Before committing ANY code:**
+
+- [ ] Read relevant CLAUDE.md section for the code you're changing
+- [ ] Updated affected documentation files
+- [ ] Verified code examples in docs are accurate
+- [ ] Checked all cross-references work
+- [ ] Added/updated JSDoc comments
+- [ ] Updated migration tracking if database changed
+- [ ] Created setup guide if new major feature
+- [ ] Removed outdated information
+
+**See detailed workflow in:**
+- Backend: `banxway-backend/CLAUDE.md` → Documentation Workflow
+- Frontend: `banxway-platform/CLAUDE.md` → Documentation Workflow
 
 ---
 

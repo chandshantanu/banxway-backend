@@ -15,14 +15,281 @@ Project-specific guidelines for Claude Code when working on the Banxway backend.
 
 ## Table of Contents
 
-1. [Error Handling Standards](#error-handling-standards)
-2. [Logging Methodology](#logging-methodology)
-3. [Database Access Patterns](#database-access-patterns)
-4. [API Response Standards](#api-response-standards)
-5. [Code Organization](#code-organization)
-6. [Testing Strategy](#testing-strategy)
-7. [Security Requirements](#security-requirements)
-8. [Deployment Process](#deployment-process)
+1. [Documentation Workflow](#documentation-workflow) ⭐ **NEW**
+2. [Error Handling Standards](#error-handling-standards)
+3. [Logging Methodology](#logging-methodology)
+4. [Database Access Patterns](#database-access-patterns)
+5. [API Response Standards](#api-response-standards)
+6. [Code Organization](#code-organization)
+7. [Testing Strategy](#testing-strategy)
+8. [Security Requirements](#security-requirements)
+9. [Deployment Process](#deployment-process)
+
+---
+
+## Documentation Workflow
+
+### ⭐ CRITICAL: Keep Documentation Updated
+
+**MANDATORY:** All documentation must be updated whenever code changes are made that affect:
+- Database schema
+- API endpoints
+- Authentication/security
+- Error handling patterns
+- New features or services
+- Configuration changes
+
+### Documentation Files Location
+
+**Backend Documentation:**
+```
+banxway-backend/
+├── CLAUDE.md                         # This file - development standards
+├── README.md                         # Project overview and setup
+├── CREDENTIALS.md                    # Actual credentials (GITIGNORED)
+├── DATABASE_SETUP.md                 # Database migration procedures
+├── MIGRATION_QUERIES.md              # Quick SQL reference
+├── NOTIFICATION_SYSTEM_SETUP.md      # Feature-specific setup guide
+├── QUICK_FIX_NOTIFICATIONS.sql       # Emergency migration fixes
+└── database/migrations/              # All SQL migrations
+```
+
+### When to Update Documentation
+
+#### 1. Database Schema Changes
+
+**When you create a new migration:**
+
+```bash
+# Created: database/migrations/006_new_feature.sql
+```
+
+**Update these files:**
+- ✅ `DATABASE_SETUP.md` - Add to "Current Migrations" table
+- ✅ `MIGRATION_QUERIES.md` - Add quick reference if complex
+- ✅ Create `[FEATURE]_SETUP.md` if it's a new major feature
+- ✅ Update `README_STANDARDS.md` if it affects development workflow
+
+**Example:**
+```markdown
+## DATABASE_SETUP.md
+
+| File | Description | Date | Status |
+|------|-------------|------|--------|
+| 006_new_feature.sql | Add new feature support | 2026-01-25 | ⏳ Pending |
+```
+
+#### 2. API Endpoint Changes
+
+**When you add/modify an API endpoint:**
+
+```typescript
+// Created: src/api/v1/new-feature/index.ts
+router.get('/api/v1/new-feature', ...)
+```
+
+**Update these files:**
+- ✅ `CLAUDE.md` - Add to "API Response Standards" if new pattern
+- ✅ `README.md` - Add to API endpoints list
+- ✅ Create `[FEATURE]_API.md` for complex features with many endpoints
+
+**Example:**
+```markdown
+## CLAUDE.md - API Response Standards
+
+### New Feature Endpoints
+- GET /api/v1/new-feature - Description
+- POST /api/v1/new-feature - Description
+```
+
+#### 3. New Repository/Service
+
+**When you create a new repository or service:**
+
+```typescript
+// Created: src/database/repositories/new.repository.ts
+// Created: src/services/new.service.ts
+```
+
+**Update these files:**
+- ✅ `CLAUDE.md` - Add example to "Database Access Patterns"
+- ✅ `README.md` - Add to project structure
+- ✅ Update repository template if new pattern introduced
+
+#### 4. Environment Variables
+
+**When you add new environment variables:**
+
+```env
+NEW_API_KEY=xxx
+NEW_SERVICE_URL=xxx
+```
+
+**Update these files:**
+- ✅ `CREDENTIALS.md` - Add actual value (gitignored)
+- ✅ `.env.example` - Add placeholder
+- ✅ `README.md` - Add to environment variables section
+- ✅ `CLAUDE.md` - Add to "Environment Variables" section
+
+#### 5. New Feature Implementation
+
+**When you implement a complete new feature:**
+
+**Create a dedicated setup guide:**
+```
+[FEATURE_NAME]_SETUP.md
+```
+
+**Include:**
+- What was implemented (backend + frontend)
+- Database schema changes
+- API endpoints
+- Setup instructions
+- Testing procedures
+- Troubleshooting guide
+
+**Example:** `NOTIFICATION_SYSTEM_SETUP.md`
+
+### Documentation Templates
+
+#### Feature Setup Guide Template
+
+```markdown
+# [Feature Name] Setup Guide
+
+## What Was Implemented
+
+### Backend
+- Database tables
+- Repositories
+- Services
+- API endpoints
+
+### Frontend
+- API clients
+- Components
+- State management
+
+## Setup Instructions
+
+### Step 1: Database Migration
+[Instructions]
+
+### Step 2: Backend Configuration
+[Instructions]
+
+### Step 3: Frontend Configuration
+[Instructions]
+
+## Testing
+
+[Test procedures]
+
+## Troubleshooting
+
+[Common issues and solutions]
+```
+
+#### Migration Documentation Template
+
+```sql
+-- Migration: [NNN]_[description].sql
+-- Purpose: [What this migration does]
+-- Created: [Date]
+-- Author: [Name]
+
+-- IMPORTANT: Dependencies
+-- This migration requires:
+-- - Migration 001_initial_schema.sql (for users table)
+-- - Migration 002_other.sql (for other_table)
+
+-- IMPORTANT: Breaking Changes
+-- [List any breaking changes]
+
+[SQL content]
+```
+
+### Documentation Update Checklist
+
+**Before committing code, verify:**
+
+- [ ] Updated relevant documentation files
+- [ ] Added migration to DATABASE_SETUP.md if applicable
+- [ ] Created/updated feature setup guide if major feature
+- [ ] Updated CLAUDE.md if new patterns introduced
+- [ ] Updated CREDENTIALS.md if new secrets added
+- [ ] Updated README.md if project structure changed
+- [ ] Verified all links work
+- [ ] Checked for outdated information
+
+### Git Commit Message for Documentation
+
+**Format:**
+```
+docs([scope]): [description]
+
+[Details about what was updated]
+
+Updated files:
+- [file1]
+- [file2]
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+**Example:**
+```
+docs(notifications): add complete setup guide
+
+Created NOTIFICATION_SYSTEM_SETUP.md with:
+- Implementation details
+- Setup instructions
+- Testing procedures
+- Troubleshooting guide
+
+Updated files:
+- DATABASE_SETUP.md (added migration 005)
+- CLAUDE.md (updated table of contents)
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+### Documentation Maintenance Schedule
+
+**Weekly:**
+- [ ] Review all .md files for outdated information
+- [ ] Update version numbers
+- [ ] Check all links are working
+
+**After Each Release:**
+- [ ] Update README.md with new features
+- [ ] Update CHANGELOG.md (if exists)
+- [ ] Archive old setup guides if superseded
+
+**Monthly:**
+- [ ] Review and consolidate documentation
+- [ ] Remove deprecated information
+- [ ] Update screenshots/examples
+
+### Documentation Best Practices
+
+**DO:**
+- ✅ Use clear, concise language
+- ✅ Include code examples
+- ✅ Provide step-by-step instructions
+- ✅ Add troubleshooting sections
+- ✅ Keep file names descriptive (UPPERCASE_WITH_UNDERSCORES.md)
+- ✅ Use tables for structured data
+- ✅ Include "Last Updated" dates
+- ✅ Cross-reference related documents
+
+**DON'T:**
+- ❌ Leave TODO or placeholder text
+- ❌ Include secrets in committed documentation
+- ❌ Use relative dates ("yesterday", "last week")
+- ❌ Duplicate information across files
+- ❌ Write documentation after the fact
+- ❌ Use ambiguous language ("maybe", "possibly")
 
 ---
 
