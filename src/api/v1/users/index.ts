@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { authenticateRequest, requirePermission, AuthenticatedRequest } from '../../../middleware/auth.middleware';
 import { Permission } from '../../../utils/permissions';
-import { supabaseAdmin } from '../../../config/database.config';
+import { supabase, supabaseAdmin } from '../../../config/database.config';
 import { logger } from '../../../utils/logger';
 import presenceRouter from './presence';
 
@@ -49,6 +49,151 @@ router.get('/me', async (req: AuthenticatedRequest, res: Response): Promise<void
       success: true,
       data: req.user,
     });
+  }
+});
+
+// Update current user profile (limited fields for self-update)
+router.patch('/me', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const updates = req.body;
+
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Not authenticated' });
+      return;
+    }
+
+    // Only allow updating safe fields for self
+    const allowedFields = ['full_name', 'preferences', 'avatar_url'];
+    const safeUpdates: any = {};
+    allowedFields.forEach(field => {
+      if (updates[field] !== undefined) {
+        safeUpdates[field] = updates[field];
+      }
+    });
+
+    if (Object.keys(safeUpdates).length === 0) {
+      res.status(400).json({ success: false, error: 'No valid fields to update' });
+      return;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .update(safeUpdates)
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error updating user profile', { userId, error: error.message });
+      res.status(500).json({ success: false, error: 'Failed to update profile' });
+      return;
+    }
+
+    logger.info('User profile updated', { userId, fields: Object.keys(safeUpdates) });
+
+    res.json({
+      success: true,
+      data,
+    });
+  } catch (error: any) {
+    logger.error('Error in PATCH /me', { error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Change password for current user
+router.post('/me/change-password', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Not authenticated' });
+      return;
+    }
+
+    // Validate input
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({
+        success: false,
+        error: 'Both current password and new password are required'
+      });
+      return;
+    }
+
+    // Validate new password strength
+    if (newPassword.length < 8) {
+      res.status(400).json({
+        success: false,
+        error: 'New password must be at least 8 characters long'
+      });
+      return;
+    }
+
+    // Check password complexity
+    const hasUpperCase = /[A-Z]/.test(newPassword);
+    const hasLowerCase = /[a-z]/.test(newPassword);
+    const hasNumber = /\d/.test(newPassword);
+    const hasSpecialChar = /[^a-zA-Z0-9]/.test(newPassword);
+
+    if (!hasUpperCase || !hasLowerCase || !hasNumber) {
+      res.status(400).json({
+        success: false,
+        error: 'Password must contain uppercase, lowercase, and numbers'
+      });
+      return;
+    }
+
+    // Get user email for verification
+    const { data: userData, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !userData) {
+      logger.error('Error fetching user for password change', { userId, error: userError?.message });
+      res.status(500).json({ success: false, error: 'Failed to verify user' });
+      return;
+    }
+
+    // Verify current password by attempting to sign in
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: userData.email,
+      password: currentPassword,
+    });
+
+    if (signInError) {
+      logger.warn('Invalid current password attempt', { userId });
+      res.status(400).json({
+        success: false,
+        error: 'Current password is incorrect'
+      });
+      return;
+    }
+
+    // Update password using Supabase Admin
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+      userId,
+      { password: newPassword }
+    );
+
+    if (updateError) {
+      logger.error('Error updating password', { userId, error: updateError.message });
+      res.status(500).json({ success: false, error: 'Failed to update password' });
+      return;
+    }
+
+    logger.info('Password changed successfully', { userId });
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully',
+    });
+  } catch (error: any) {
+    logger.error('Error in POST /me/change-password', { error: error.message });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
