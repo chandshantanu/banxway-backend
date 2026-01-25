@@ -85,6 +85,17 @@ export interface UpdateEmailAccountRequest {
 
 class EmailAccountRepository {
   /**
+   * Check if email_accounts table exists and is accessible
+   */
+  private isTableMissingError(error: any): boolean {
+    return (
+      error.code === '42P01' || // PostgreSQL: undefined_table
+      error.message?.includes('email_accounts') && error.message?.includes('not found') ||
+      error.message?.includes('schema cache')
+    );
+  }
+
+  /**
    * Find all active email accounts
    */
   async findAll(includeInactive = false): Promise<EmailAccount[]> {
@@ -101,6 +112,12 @@ class EmailAccountRepository {
     const { data, error } = await query;
 
     if (error) {
+      // If table doesn't exist yet, return empty array (graceful degradation)
+      if (this.isTableMissingError(error)) {
+        logger.debug('Email accounts table not found - returning empty array');
+        return [];
+      }
+
       logger.error('Error fetching email accounts', { error: error.message });
       throw error;
     }
@@ -120,6 +137,12 @@ class EmailAccountRepository {
       .order('name', { ascending: true });
 
     if (error) {
+      // If table doesn't exist, return empty array
+      if (error.code === '42P01' || error.message?.includes('not found')) {
+        logger.debug('Email accounts table not found - returning empty array');
+        return [];
+      }
+
       logger.error('Error fetching polling-enabled accounts', { error: error.message });
       throw error;
     }
@@ -139,6 +162,13 @@ class EmailAccountRepository {
 
     if (error) {
       if (error.code === 'PGRST116') return null; // Not found
+
+      // If table doesn't exist, return null (graceful degradation)
+      if (this.isTableMissingError(error)) {
+        logger.debug('Email accounts table not found - returning null');
+        return null;
+      }
+
       logger.error('Error fetching email account', { id, error: error.message });
       throw error;
     }
@@ -158,6 +188,13 @@ class EmailAccountRepository {
 
     if (error) {
       if (error.code === 'PGRST116') return null; // Not found
+
+      // If table doesn't exist, return null (graceful degradation)
+      if (this.isTableMissingError(error)) {
+        logger.debug('Email accounts table not found - returning null');
+        return null;
+      }
+
       logger.error('Error fetching email account by email', { email, error: error.message });
       throw error;
     }
@@ -178,6 +215,13 @@ class EmailAccountRepository {
 
     if (error) {
       if (error.code === 'PGRST116') return null;
+
+      // If table doesn't exist, return null (graceful degradation)
+      if (this.isTableMissingError(error)) {
+        logger.debug('Email accounts table not found - returning null');
+        return null;
+      }
+
       logger.error('Error fetching default account', { error: error.message });
       throw error;
     }
