@@ -1,11 +1,10 @@
--- Notifications Migration
--- Adds user notification system for task assignments, SLA warnings, etc.
--- Created: 2026-01-25
+-- Quick Fix: Notifications Migration
+-- Run this in Supabase SQL Editor
+-- URL: https://supabase.com/dashboard/project/thaobumtmokgayljvlgn/sql/new
 
 -- =====================================================
--- HELPER FUNCTION: Update Updated_At Timestamp
+-- STEP 1: Create update_updated_at function (if missing)
 -- =====================================================
--- Create the function if it doesn't exist (should be in earlier migrations)
 
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
@@ -16,7 +15,13 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- =====================================================
--- NOTIFICATIONS TABLE
+-- STEP 2: Enable pgcrypto extension
+-- =====================================================
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- =====================================================
+-- STEP 3: Create notifications table
 -- =====================================================
 
 CREATE TABLE IF NOT EXISTS notifications (
@@ -55,27 +60,29 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 
 -- =====================================================
--- INDEXES
+-- STEP 4: Create indexes
 -- =====================================================
 
 -- Query notifications by user
-CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
 
 -- Query unread notifications
-CREATE INDEX idx_notifications_user_unread ON notifications(user_id, read_at) WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, read_at) WHERE read_at IS NULL;
 
 -- Query notifications by creation date
-CREATE INDEX idx_notifications_created_at ON notifications(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
 
 -- Query notifications by type
-CREATE INDEX idx_notifications_type ON notifications(type);
+CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
 
 -- Composite index for common query: user's recent unread notifications
-CREATE INDEX idx_notifications_user_recent_unread ON notifications(user_id, created_at DESC) WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_notifications_user_recent_unread ON notifications(user_id, created_at DESC) WHERE read_at IS NULL;
 
 -- =====================================================
--- TRIGGERS
+-- STEP 5: Create trigger
 -- =====================================================
+
+DROP TRIGGER IF EXISTS update_notifications_updated_at ON notifications;
 
 CREATE TRIGGER update_notifications_updated_at
   BEFORE UPDATE ON notifications
@@ -83,10 +90,16 @@ CREATE TRIGGER update_notifications_updated_at
   EXECUTE FUNCTION update_updated_at();
 
 -- =====================================================
--- ROW LEVEL SECURITY
+-- STEP 6: Enable Row Level Security
 -- =====================================================
 
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS notifications_select_own ON notifications;
+DROP POLICY IF EXISTS notifications_insert ON notifications;
+DROP POLICY IF EXISTS notifications_update_own ON notifications;
+DROP POLICY IF EXISTS notifications_delete_own ON notifications;
 
 -- Users can only see their own notifications
 CREATE POLICY notifications_select_own ON notifications
@@ -109,7 +122,7 @@ CREATE POLICY notifications_delete_own ON notifications
   USING (user_id = auth.uid());
 
 -- =====================================================
--- HELPER FUNCTIONS
+-- STEP 7: Create helper functions
 -- =====================================================
 
 -- Function to create a notification (callable by services)
@@ -166,12 +179,16 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =====================================================
--- COMMENTS
+-- STEP 8: Add to migration tracking (optional)
 -- =====================================================
 
-COMMENT ON TABLE notifications IS 'User notifications for task assignments, SLA warnings, and other events';
-COMMENT ON COLUMN notifications.type IS 'Type of notification (TASK_ASSIGNED, SLA_WARNING, etc.)';
-COMMENT ON COLUMN notifications.read_at IS 'Timestamp when notification was marked as read (NULL = unread)';
-COMMENT ON COLUMN notifications.request_id IS 'Optional reference to related shipment';
-COMMENT ON COLUMN notifications.thread_id IS 'Optional reference to related communication thread';
-COMMENT ON COLUMN notifications.action_url IS 'Optional URL for user action (e.g., /requests/123/review)';
+INSERT INTO schema_migrations (migration_name)
+VALUES ('005_notifications.sql')
+ON CONFLICT (migration_name) DO NOTHING;
+
+-- =====================================================
+-- SUCCESS!
+-- =====================================================
+-- The notifications table is now ready to use.
+-- You can verify by running:
+--   SELECT * FROM notifications;
