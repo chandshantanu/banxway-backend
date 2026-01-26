@@ -5,8 +5,9 @@ import { logger } from '../../../utils/logger';
 const router = Router();
 
 // Helper to get organization ID from request
+// Uses nil UUID (00000000-0000-0000-0000-000000000000) as fallback for unauthenticated requests
 const getOrgId = (req: Request): string => {
-  return (req as any).user?.organizationId || (req as any).user?.organization_id || 'default-org';
+  return (req as any).user?.organizationId || (req as any).user?.organization_id || '00000000-0000-0000-0000-000000000000';
 };
 
 /**
