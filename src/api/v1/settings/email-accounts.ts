@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import emailAccountService from '../../../services/email/email-account.service';
 import { CreateEmailAccountRequest, UpdateEmailAccountRequest } from '../../../database/repositories/email-account.repository';
 import { logger } from '../../../utils/logger';
+import { EmailProviderRegistry } from '../../../services/email/email-provider.registry';
+import { MXLookupService } from '../../../services/email/mx-lookup.service';
 
 const router = Router();
 
@@ -32,6 +34,90 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       success: false,
       error: 'Failed to list email accounts',
       message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/v1/settings/email-accounts/providers
+ * List available email providers
+ */
+router.get('/providers', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const providers = EmailProviderRegistry.getAllProviders();
+
+    res.json({
+      success: true,
+      data: providers.map((p) => ({
+        id: p.id,
+        name: p.name,
+        helpUrl: p.helpUrl,
+        smtp: p.smtp,
+        imap: p.imap,
+      })),
+      count: providers.length,
+    });
+  } catch (error: any) {
+    logger.error('Failed to fetch providers', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch email providers',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/settings/email-accounts/detect-provider
+ * Detect provider from email address
+ */
+router.post('/detect-provider', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      res.status(400).json({
+        success: false,
+        error: 'Email address is required',
+      });
+      return;
+    }
+
+    // Try domain detection first
+    let provider = EmailProviderRegistry.detectFromEmail(email);
+    let confidence: 'high' | 'medium' | 'low' = 'high';
+
+    if (!provider) {
+      // Try MX lookup
+      const mxResult = await MXLookupService.detectProvider(email);
+      provider = mxResult.config;
+      confidence = mxResult.confidence;
+    }
+
+    if (provider) {
+      res.json({
+        success: true,
+        data: {
+          provider: provider.id,
+          name: provider.name,
+          confidence,
+          config: {
+            smtp: provider.smtp,
+            imap: provider.imap,
+          },
+        },
+      });
+    } else {
+      res.json({
+        success: false,
+        message: 'Could not detect email provider',
+        data: null,
+      });
+    }
+  } catch (error: any) {
+    logger.error('Failed to detect provider', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to detect email provider',
     });
   }
 });
@@ -75,28 +161,65 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 
 /**
  * POST /api/v1/settings/email-accounts
- * Create a new email account
+ * Create a new email account (supports both provider-based and manual configuration)
  */
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const accountData: CreateEmailAccountRequest = req.body;
-
-    // Validate required fields
-    if (!accountData.name || !accountData.email || !accountData.smtp_user || !accountData.smtp_password || !accountData.imap_user || !accountData.imap_password) {
-      res.status(400).json({
-        success: false,
-        error: 'Missing required fields',
-        required: ['name', 'email', 'smtp_user', 'smtp_password', 'imap_user', 'imap_password'],
-      });
-      return;
-    }
-
-    // Get user ID from request (set by auth middleware)
     const userId = (req as any).user?.id;
 
-    const account = await emailAccountService.createAccount(accountData, userId);
+    // Check if request uses simplified provider format
+    const hasProvider = req.body.provider !== undefined;
+    const hasMinimalFields = req.body.email && req.body.smtp_password && req.body.imap_password;
+    const hasAllSMTPFields = req.body.smtp_host && req.body.smtp_port !== undefined;
 
-    // Strip encrypted passwords
+    let account;
+
+    if (hasProvider || (hasMinimalFields && !hasAllSMTPFields)) {
+      // Use new provider-based creation
+      logger.info('Creating email account with provider', {
+        email: req.body.email,
+        provider: req.body.provider || 'auto-detect',
+      });
+
+      // Validate minimal required fields
+      if (!req.body.name || !req.body.email || !req.body.smtp_password || !req.body.imap_password) {
+        res.status(400).json({
+          success: false,
+          error: 'Missing required fields',
+          required: ['name', 'email', 'smtp_password', 'imap_password'],
+        });
+        return;
+      }
+
+      account = await emailAccountService.createAccountWithProvider(req.body, userId);
+    } else {
+      // Use legacy creation (all fields provided)
+      logger.info('Creating email account with manual configuration', {
+        email: req.body.email,
+      });
+
+      // Validate all required fields for manual configuration
+      const accountData: CreateEmailAccountRequest = req.body;
+      if (
+        !accountData.name ||
+        !accountData.email ||
+        !accountData.smtp_user ||
+        !accountData.smtp_password ||
+        !accountData.imap_user ||
+        !accountData.imap_password
+      ) {
+        res.status(400).json({
+          success: false,
+          error: 'Missing required fields',
+          required: ['name', 'email', 'smtp_user', 'smtp_password', 'imap_user', 'imap_password'],
+        });
+        return;
+      }
+
+      account = await emailAccountService.createAccount(accountData, userId);
+    }
+
+    // Strip encrypted passwords from response
     const safeAccount = {
       ...account,
       smtp_pass_encrypted: undefined,
@@ -109,7 +232,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       message: 'Email account created successfully',
     });
   } catch (error: any) {
-    logger.error('Error creating email account', { error: error.message });
+    logger.error('Failed to create email account', { error: error.message });
 
     if (error.message.includes('already exists')) {
       res.status(409).json({
@@ -120,10 +243,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    res.status(500).json({
+    res.status(400).json({
       success: false,
-      error: 'Failed to create email account',
-      message: error.message,
+      error: error.message,
     });
   }
 });

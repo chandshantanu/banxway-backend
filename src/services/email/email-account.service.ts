@@ -7,6 +7,8 @@ import emailAccountRepository, {
   UpdateEmailAccountRequest,
 } from '../../database/repositories/email-account.repository';
 import { logger } from '../../utils/logger';
+import { EmailProviderRegistry } from './email-provider.registry';
+import { MXLookupService } from './mx-lookup.service';
 
 export interface TestConnectionResult {
   success: boolean;
@@ -16,6 +18,32 @@ export interface TestConnectionResult {
     authenticated: boolean;
     capabilities?: string[];
   };
+}
+
+/**
+ * Simplified request for creating email account with provider
+ */
+export interface CreateEmailAccountWithProviderRequest {
+  provider?: string; // Provider ID (e.g., "zoho-professional")
+  name: string;
+  email: string;
+  smtp_user?: string; // Optional, defaults to email
+  smtp_password: string;
+  imap_user?: string; // Optional, defaults to email
+  imap_password: string;
+  // Optional overrides for advanced mode
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_secure?: boolean;
+  imap_host?: string;
+  imap_port?: number;
+  imap_tls?: boolean;
+  // Other optional fields
+  signature_html?: string;
+  signature_text?: string;
+  is_default?: boolean;
+  auto_assign_to?: string;
+  default_tags?: string[];
 }
 
 class EmailAccountService {
@@ -70,6 +98,106 @@ class EmailAccountService {
     }
 
     return emailAccountRepository.create(data, userId);
+  }
+
+  /**
+   * Create email account with provider template
+   * Simplifies account creation by auto-configuring SMTP/IMAP settings
+   */
+  async createAccountWithProvider(
+    data: CreateEmailAccountWithProviderRequest,
+    userId?: string
+  ): Promise<EmailAccount> {
+    logger.info('Creating email account with provider', {
+      email: data.email,
+      provider: data.provider || 'auto-detect',
+    });
+
+    // Validate email format
+    if (!this.isValidEmail(data.email)) {
+      throw new Error('Invalid email address format');
+    }
+
+    // Check if email already exists
+    const existing = await emailAccountRepository.findByEmail(data.email);
+    if (existing) {
+      throw new Error('An account with this email already exists');
+    }
+
+    // Step 1: Detect or get provider config
+    let providerConfig = null;
+
+    if (data.provider) {
+      // User selected a provider
+      providerConfig = EmailProviderRegistry.getProvider(data.provider);
+      if (!providerConfig) {
+        throw new Error(`Unknown email provider: ${data.provider}`);
+      }
+      logger.debug('Using selected provider', { provider: data.provider });
+    } else {
+      // Try to detect provider from email domain
+      providerConfig = EmailProviderRegistry.detectFromEmail(data.email);
+
+      if (!providerConfig) {
+        // Try MX record lookup
+        const mxResult = await MXLookupService.detectProvider(data.email);
+        if (mxResult.config) {
+          providerConfig = mxResult.config;
+          logger.info('Provider detected from MX records', {
+            email: data.email,
+            provider: providerConfig.id,
+            confidence: mxResult.confidence,
+          });
+        }
+      } else {
+        logger.info('Provider detected from email domain', {
+          email: data.email,
+          provider: providerConfig.id,
+        });
+      }
+    }
+
+    // Step 2: Build full account data with provider defaults
+    const accountData: CreateEmailAccountRequest = {
+      name: data.name,
+      email: data.email,
+
+      // SMTP configuration
+      smtp_host: data.smtp_host || providerConfig?.smtp.host || 'smtp.zoho.com',
+      smtp_port: data.smtp_port ?? providerConfig?.smtp.port ?? 587,
+      smtp_secure: data.smtp_secure ?? providerConfig?.smtp.secure ?? false,
+      smtp_user: data.smtp_user || data.email,
+      smtp_password: data.smtp_password,
+      smtp_enabled: true,
+
+      // IMAP configuration
+      imap_host: data.imap_host || providerConfig?.imap.host || 'imap.zoho.com',
+      imap_port: data.imap_port ?? providerConfig?.imap.port ?? 993,
+      imap_tls: data.imap_tls ?? providerConfig?.imap.tls ?? true,
+      imap_user: data.imap_user || data.email,
+      imap_password: data.imap_password,
+      imap_enabled: true,
+
+      // Other fields
+      poll_interval_ms: 30000,
+      signature_html: data.signature_html,
+      signature_text: data.signature_text,
+      is_default: data.is_default || false,
+      auto_assign_to: data.auto_assign_to,
+      default_tags: data.default_tags || [],
+    };
+
+    logger.info('Account configuration prepared', {
+      email: data.email,
+      smtp_host: accountData.smtp_host,
+      smtp_port: accountData.smtp_port,
+      imap_host: accountData.imap_host,
+      imap_port: accountData.imap_port,
+      provider: providerConfig?.id || 'custom',
+    });
+
+    // Step 3: Create account using existing flow
+    return this.createAccount(accountData, userId);
   }
 
   /**
