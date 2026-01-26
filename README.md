@@ -199,6 +199,129 @@ npm run build
 npm start
 ```
 
+---
+
+## 🔧 Background Workers
+
+Banxway uses **scalable background workers** for asynchronous job processing (emails, WhatsApp, transcriptions).
+
+### Worker Types
+
+| Worker | Purpose | Concurrency | Auto-Scaling |
+|--------|---------|-------------|--------------|
+| **Email Poller** | Poll IMAP for new emails | 5 | 1-5 replicas |
+| **WhatsApp Processor** | Send WhatsApp via Exotel | 10 | 2-10 replicas |
+| **Transcription Worker** | Transcribe call recordings | 3 | 1-3 replicas |
+
+### Quick Start
+
+**Local Development:**
+```bash
+# Start all workers (in separate terminal)
+npm run workers:all:dev
+
+# Or start individually
+npm run worker:email-poller:dev
+npm run worker:whatsapp:dev
+npm run worker:transcription:dev
+```
+
+**Docker Compose (Recommended):**
+```bash
+# From platform root
+docker-compose up -d
+
+# Scale specific worker
+docker-compose up --scale whatsapp-worker=3 -d
+
+# View logs
+docker-compose logs -f whatsapp-worker
+```
+
+**Azure Production:**
+```bash
+# Deploy with auto-scaling
+./deploy-workers-azure.sh
+
+# Check status
+az containerapp list -g banxway-platform-prod
+```
+
+### Configuration
+
+Create `.env.workers` from template:
+```bash
+cp .env.workers.example .env.workers
+# Edit with your credentials
+```
+
+**Key Environment Variables:**
+- `REDIS_URL` - Redis connection string
+- `WORKER_CONCURRENCY` - Jobs per worker instance
+- `EMAIL_POLL_INTERVAL` - Email polling interval (ms)
+- `EXOTEL_*` - WhatsApp/SMS credentials
+- `OPENAI_API_KEY` - Transcription API key
+
+### Scaling
+
+**Manual Scaling (Docker):**
+```bash
+docker-compose up --scale whatsapp-worker=5 -d
+```
+
+**Auto-Scaling (Azure):**
+Workers automatically scale based on:
+- Queue length (BullMQ job count)
+- CPU/Memory utilization
+- Custom metrics
+
+**Configuration:**
+- Min replicas: 1-2
+- Max replicas: 3-10 (depends on worker type)
+- Scale threshold: 10-20 jobs per replica
+
+### Monitoring
+
+**Queue Status:**
+```bash
+# Check pending jobs
+redis-cli LLEN bull:whatsapp-processing:wait
+
+# Check active jobs
+redis-cli LLEN bull:whatsapp-processing:active
+```
+
+**Worker Logs:**
+```bash
+# Docker Compose
+docker-compose logs -f [worker-name]
+
+# Azure Container Apps
+az containerapp logs show -n [worker-name] -g banxway-platform-prod
+```
+
+### Documentation
+
+- **Quick Start Guide**: `WORKER_QUICKSTART.md` - Get started in 10 minutes
+- **Comprehensive Guide**: `WORKER_SCALING.md` - Full deployment and scaling docs
+- **Docker Compose**: `../docker-compose.yml` - Local stack configuration
+- **Azure Deployment**: `deploy-workers-azure.sh` - Production deployment script
+
+### Architecture
+
+```
+API Server → Redis Queue → Worker Cluster → Supabase DB
+            (BullMQ)      (Auto-scaled)
+```
+
+Workers process jobs asynchronously:
+1. API enqueues job to Redis
+2. Available worker picks up job
+3. Worker processes and updates database
+4. WebSocket emits status update to UI
+
+---
+
 ## 📡 API Endpoints
 
 ### Base URL: `/api/v1`

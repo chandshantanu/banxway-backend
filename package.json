@@ -14,7 +14,15 @@
     "type-check": "tsc --noEmit",
     "migrate": "node migrate-all.js",
     "migrate:prod": "echo 'Set DATABASE_URL env var and run: node migrate-all.js'",
-    "seed": "ts-node scripts/seed.ts"
+    "seed": "ts-node scripts/seed.ts",
+    "worker:email-poller": "node dist/workers/email-poller.worker.js",
+    "worker:email-poller:dev": "ts-node src/workers/email-poller.worker.ts",
+    "worker:whatsapp": "node dist/workers/whatsapp-processor.worker.js",
+    "worker:whatsapp:dev": "ts-node src/workers/whatsapp-processor.worker.ts",
+    "worker:transcription": "node dist/workers/transcription.worker.js",
+    "worker:transcription:dev": "ts-node src/workers/transcription.worker.ts",
+    "workers:all": "concurrently \"npm run worker:email-poller\" \"npm run worker:whatsapp\" \"npm run worker:transcription\"",
+    "workers:all:dev": "concurrently \"npm run worker:email-poller:dev\" \"npm run worker:whatsapp:dev\" \"npm run worker:transcription:dev\""
   },
   "keywords": [
     "freight",
@@ -68,6 +76,7 @@
     "@types/uuid": "^9.0.7",
     "@typescript-eslint/eslint-plugin": "^6.17.0",
     "@typescript-eslint/parser": "^6.17.0",
+    "concurrently": "^8.2.2",
     "eslint": "^8.56.0",
     "jest": "^29.7.0",
     "nodemon": "^3.0.2",

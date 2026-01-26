@@ -167,56 +167,92 @@ async function processCallWebhook(payload: ExotelWebhookPayload): Promise<void> 
       await updateWorkflowInstanceWithCallResult(payload.CustomField, callRecord);
     }
 
+    // Find existing message by external_id or create new one
+    let { data: message } = await supabaseAdmin
+      .from('communication_messages')
+      .select('*')
+      .eq('external_id', payload.CallSid)
+      .single();
+
     // Find or create communication thread
     const phoneNumber = payload.Direction === 'inbound' ? payload.From : payload.To;
     const thread = await findOrCreateThreadByPhone(phoneNumber);
 
-    if (thread) {
-      // Create message record for the call
-      const { data: message } = await supabaseAdmin.from('communication_messages').insert({
-        thread_id: thread.id,
-        channel: 'VOICE',
-        direction: callRecord.direction,
-        content: `Call ${payload.CallStatus}. Duration: ${payload.CallDuration || 0}s`,
-        from_address: payload.From,
-        to_addresses: [{ address: payload.To }],
-        external_id: payload.CallSid,
-        sent_at: new Date(),
-        transcription_status: payload.RecordingUrl ? 'PENDING' : null,
-        metadata: {
-          recordingUrl: payload.RecordingUrl,
-          duration: payload.CallDuration,
-        },
-      }).select().single();
+    if (!message && thread) {
+      // Create new message record for the call
+      const { data: newMessage } = await supabaseAdmin
+        .from('communication_messages')
+        .insert({
+          thread_id: thread.id,
+          channel: 'VOICE',
+          direction: callRecord.direction,
+          content: `Call ${payload.CallStatus}. Duration: ${payload.CallDuration || 0}s`,
+          from_address: payload.From,
+          to_addresses: [{ address: payload.To }],
+          external_id: payload.CallSid,
+          status: mapCallStatus(payload.CallStatus),
+          sent_at: new Date(),
+          transcription_status: payload.RecordingUrl ? 'PENDING' : null,
+          metadata: {
+            recordingUrl: payload.RecordingUrl,
+            duration: payload.CallDuration,
+            direction: payload.Direction,
+          },
+        })
+        .select()
+        .single();
 
-      // Queue transcription if recording is available
-      if (payload.RecordingUrl && message) {
-        try {
-          await queueTranscription({
-            messageId: message.id,
-            threadId: thread.id,
-            audioUrl: payload.RecordingUrl,
-            callSid: payload.CallSid,
-          });
+      message = newMessage;
+    } else if (message) {
+      // Update existing message with final status
+      const { data: updatedMessage } = await supabaseAdmin
+        .from('communication_messages')
+        .update({
+          status: mapCallStatus(payload.CallStatus),
+          content: `Call ${payload.CallStatus}. Duration: ${payload.CallDuration || 0}s`,
+          metadata: {
+            ...message.metadata,
+            recordingUrl: payload.RecordingUrl,
+            duration: payload.CallDuration,
+          },
+        })
+        .eq('id', message.id)
+        .select()
+        .single();
 
-          logger.info('Transcription queued for call', {
-            callSid: payload.CallSid,
-            messageId: message.id,
-          });
-        } catch (error: any) {
-          logger.error('Failed to queue transcription', {
-            error: error.message,
-            callSid: payload.CallSid,
-          });
-        }
+      message = updatedMessage;
+    }
+
+    // Queue transcription if recording is available
+    if (payload.RecordingUrl && message && thread) {
+      try {
+        await queueTranscription({
+          messageId: message.id,
+          threadId: thread.id,
+          audioUrl: payload.RecordingUrl,
+          callSid: payload.CallSid,
+        });
+
+        logger.info('Transcription queued for call', {
+          callSid: payload.CallSid,
+          messageId: message.id,
+        });
+      } catch (error: any) {
+        logger.error('Failed to queue transcription', {
+          error: error.message,
+          callSid: payload.CallSid,
+        });
       }
+    }
 
-      // Emit WebSocket event
-      io.to(`thread:${thread.id}`).emit('thread:call_update', {
+    // Emit WebSocket event for status update
+    if (message && thread) {
+      io.to(`thread:${thread.id}`).emit('message:status_update', {
+        messageId: message.id,
         threadId: thread.id,
+        status: message.status,
         callStatus: payload.CallStatus,
-        callSid: payload.CallSid,
-        message: message,
+        recordingUrl: payload.RecordingUrl,
       });
     }
 
@@ -310,20 +346,37 @@ async function processIncomingWhatsAppMessage(payload: ExotelWebhookPayload): Pr
  */
 async function processWhatsAppStatusUpdate(payload: ExotelWebhookPayload): Promise<void> {
   // Update message status in database
-  const { error } = await supabaseAdmin
+  const { data: message, error } = await supabaseAdmin
     .from('communication_messages')
     .update({
       status: mapWhatsAppStatus(payload.MessageStatus),
       delivered_at:
         payload.MessageStatus === 'delivered' ? new Date() : undefined,
       read_at: payload.MessageStatus === 'read' ? new Date() : undefined,
+      failed_at: payload.MessageStatus === 'failed' ? new Date() : undefined,
+      error_message: payload.ErrorMessage || null,
     })
-    .eq('external_id', payload.MessageSid);
+    .eq('external_id', payload.MessageSid)
+    .select()
+    .single();
 
   if (error) {
-    logger.error('Failed to update message status', {
+    logger.error('Failed to update WhatsApp status', {
       error: error.message,
       messageSid: payload.MessageSid,
+    });
+    return;
+  }
+
+  if (message) {
+    // Emit WebSocket event for real-time status update
+    io.to(`thread:${message.thread_id}`).emit('message:status_update', {
+      messageId: message.id,
+      threadId: message.thread_id,
+      status: message.status,
+      deliveredAt: message.delivered_at,
+      readAt: message.read_at,
+      failedAt: message.failed_at,
     });
   }
 
@@ -527,28 +580,46 @@ async function processIncomingSMS(payload: ExotelWebhookPayload): Promise<void> 
  * Process SMS status update
  */
 async function processSMSStatusUpdate(payload: ExotelWebhookPayload): Promise<void> {
+  const status = payload.Status || payload.SmsStatus;
+
   // Update message status in database
-  const { error } = await supabaseAdmin
+  const { data: message, error } = await supabaseAdmin
     .from('communication_messages')
     .update({
-      status: mapSMSStatus(payload.Status || payload.SmsStatus),
+      status: mapSMSStatus(status),
       delivered_at:
-        payload.Status === 'delivered' || payload.SmsStatus === 'delivered'
+        status === 'delivered' || status === 'sent'
           ? new Date()
           : undefined,
+      failed_at: status === 'failed' ? new Date() : undefined,
+      error_message: payload.ErrorMessage || null,
     })
-    .eq('external_id', payload.SmsSid || payload.MessageSid);
+    .eq('external_id', payload.SmsSid || payload.MessageSid)
+    .select()
+    .single();
 
   if (error) {
     logger.error('Failed to update SMS status', {
       error: error.message,
       messageSid: payload.SmsSid || payload.MessageSid,
     });
+    return;
+  }
+
+  if (message) {
+    // Emit WebSocket event for real-time status update
+    io.to(`thread:${message.thread_id}`).emit('message:status_update', {
+      messageId: message.id,
+      threadId: message.thread_id,
+      status: message.status,
+      deliveredAt: message.delivered_at,
+      failedAt: message.failed_at,
+    });
   }
 
   logger.info('SMS status updated', {
     messageSid: payload.SmsSid || payload.MessageSid,
-    status: payload.Status || payload.SmsStatus,
+    status: status,
   });
 }
 

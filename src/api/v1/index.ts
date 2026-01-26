@@ -11,6 +11,7 @@ import documentsRouter from './documents';
 import webhooksRouter from './webhooks';
 import settingsRouter from './settings';
 import queueRouter from './queue';
+import attachmentsRouter from './attachments';
 import testWebhooksRouter from './test/webhooks';
 
 const router = Router();
@@ -28,6 +29,7 @@ router.use('/documents', documentsRouter);
 router.use('/webhooks', webhooksRouter);
 router.use('/settings', settingsRouter);
 router.use('/queue', queueRouter);
+router.use('/attachments', attachmentsRouter);
 
 // Test endpoints (development only)
 if (process.env.NODE_ENV !== 'production') {

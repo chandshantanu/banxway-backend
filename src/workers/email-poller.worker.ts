@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq';
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
+import nodemailer from 'nodemailer';
 import { redisConnection, emailQueue } from '../config/redis.config';
 import { parseEmailBuffer, findReferenceInSubject } from '../utils/email-parser';
 import threadRepository from '../database/repositories/thread.repository';
@@ -327,8 +328,118 @@ async function findMessageByExternalId(externalId: string): Promise<any> {
 }
 
 async function sendEmail(data: any): Promise<void> {
-  // TODO: Implement email sending with specific account
-  logger.info('Sending email', { to: data.to, subject: data.subject, accountId: data.accountId });
+  const {
+    accountId,
+    threadId,
+    to,
+    cc,
+    bcc,
+    subject,
+    body,
+    html,
+    attachments,
+    inReplyTo,
+    references,
+    messageId,
+  } = data;
+
+  try {
+    // Get email account with decrypted credentials
+    const account = await emailAccountService.getAccountWithCredentials(accountId);
+
+    if (!account) {
+      throw new Error(`Email account not found: ${accountId}`);
+    }
+
+    // Create transporter for this specific account
+    const transporter = nodemailer.createTransport({
+      host: account.smtp_host,
+      port: account.smtp_port,
+      secure: account.smtp_secure,
+      auth: {
+        user: account.smtp_user,
+        pass: account.smtp_password,
+      },
+      tls: {
+        rejectUnauthorized: process.env.NODE_ENV === 'production',
+      },
+    });
+
+    // Prepare email options
+    const mailOptions = {
+      from: `"${account.display_name || account.email}" <${account.email}>`,
+      to: Array.isArray(to) ? to.join(', ') : to,
+      cc: cc ? (Array.isArray(cc) ? cc.join(', ') : cc) : undefined,
+      bcc: bcc ? (Array.isArray(bcc) ? bcc.join(', ') : bcc) : undefined,
+      subject,
+      text: body,
+      html: html || body,
+      attachments,
+      inReplyTo,
+      references,
+      replyTo: account.email,
+    };
+
+    // Append signature if configured
+    if (account.signature_html && html) {
+      mailOptions.html = `${html}<br/><br/>${account.signature_html}`;
+    } else if (account.signature_text && body) {
+      mailOptions.text = `${body}\n\n${account.signature_text}`;
+    }
+
+    // Send email
+    const result = await transporter.sendMail(mailOptions);
+
+    // Update message record with external ID (Message-ID from sent email)
+    await supabaseAdmin
+      .from('communication_messages')
+      .update({
+        external_id: result.messageId,
+        status: 'SENT',
+        sent_at: new Date().toISOString(),
+        metadata: {
+          envelope: result.envelope,
+          response: result.response,
+        },
+      })
+      .eq('id', messageId);
+
+    // Emit WebSocket event
+    io.to(`thread:${threadId}`).emit('message:sent', {
+      messageId,
+      threadId,
+      externalId: result.messageId,
+    });
+
+    logger.info('Email sent successfully', {
+      messageId,
+      to,
+      subject,
+      accountEmail: account.email,
+      externalId: result.messageId,
+    });
+
+    // Close transporter
+    transporter.close();
+  } catch (error: any) {
+    logger.error('Failed to send email', {
+      error: error.message,
+      messageId,
+      accountId,
+    });
+
+    // Update message status to failed
+    await supabaseAdmin
+      .from('communication_messages')
+      .update({
+        status: 'FAILED',
+        error_message: error.message,
+        failed_at: new Date().toISOString(),
+      })
+      .eq('id', messageId);
+
+    throw error;
+  }
 }
 
 // Schedule polling for all inboxes
