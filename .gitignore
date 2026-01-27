@@ -62,3 +62,9 @@ secrets/
 *.pem
 *.key
 *.cert
+
+# Test scripts and migration runners (may contain hardcoded credentials)
+test-*.js
+run-migration-*.js
+*-test.js
+migrate-*.js
