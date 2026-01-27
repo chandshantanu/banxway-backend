@@ -21,19 +21,52 @@ export async function authenticateRequest(
   try {
     const authHeader = req.headers.authorization;
 
+    // Log authentication attempt
+    logger.debug('Authentication attempt', {
+      path: req.path,
+      method: req.method,
+      hasAuthHeader: !!authHeader,
+      authHeaderPrefix: authHeader?.substring(0, 10),
+    });
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      logger.warn('No auth token provided', {
+        path: req.path,
+        method: req.method,
+        authHeader: authHeader?.substring(0, 20),
+      });
       throw new UnauthorizedError('No token provided');
     }
 
     const token = authHeader.replace('Bearer ', '');
 
+    // Log token info (first/last 10 chars only for security)
+    logger.debug('Token extracted', {
+      tokenStart: token.substring(0, 10),
+      tokenEnd: token.substring(token.length - 10),
+      tokenLength: token.length,
+    });
+
     // Verify token with Supabase
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
     if (error || !user) {
-      logger.warn('Invalid token', { error: error?.message });
+      logger.warn('Supabase token validation failed', {
+        path: req.path,
+        method: req.method,
+        error: error?.message,
+        errorName: error?.name,
+        errorStatus: error?.status,
+        hasUser: !!user,
+        tokenLength: token.length,
+      });
       throw new UnauthorizedError('Invalid token');
     }
+
+    logger.debug('Token validated successfully', {
+      userId: user.id,
+      userEmail: user.email,
+    });
 
     // Fetch user details with role
     const { data: userDetails, error: userError } = await supabase
@@ -43,11 +76,20 @@ export async function authenticateRequest(
       .single();
 
     if (userError || !userDetails) {
-      logger.error('Failed to fetch user details', { userId: user.id, error: userError?.message });
+      logger.error('Failed to fetch user details from database', {
+        userId: user.id,
+        error: userError?.message,
+        errorCode: userError?.code,
+        errorDetails: userError?.details,
+      });
       throw new UnauthorizedError('User not found');
     }
 
     if (!userDetails.is_active) {
+      logger.warn('User account is inactive', {
+        userId: userDetails.id,
+        email: userDetails.email,
+      });
       throw new ForbiddenError('User account is inactive');
     }
 
@@ -58,6 +100,12 @@ export async function authenticateRequest(
       role: userDetails.role,
       full_name: userDetails.full_name,
     };
+
+    logger.debug('Authentication successful', {
+      userId: req.user.id,
+      role: req.user.role,
+      path: req.path,
+    });
 
     // Update last_seen_at
     (async () => {
