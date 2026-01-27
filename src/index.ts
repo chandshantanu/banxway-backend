@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { Server as SocketIOServer } from 'socket.io';
 import { createServer } from 'http';
+import path from 'path';
 
 import { corsOptions } from './middleware/cors.middleware';
 import { rateLimiter } from './middleware/rate-limit.middleware';
@@ -44,7 +45,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(compression());
 
 // Static files (templates)
-app.use('/templates', express.static('public/templates'));
+app.use('/templates', express.static(path.join(__dirname, '../public/templates')));
 
 // HTTP request logging
 if (NODE_ENV === 'development') {
