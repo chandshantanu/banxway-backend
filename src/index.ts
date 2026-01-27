@@ -7,7 +7,6 @@ import dotenv from 'dotenv';
 import { Server as SocketIOServer } from 'socket.io';
 import { createServer } from 'http';
 import path from 'path';
-import fs from 'fs';
 
 import { corsOptions } from './middleware/cors.middleware';
 import { rateLimiter } from './middleware/rate-limit.middleware';
@@ -47,12 +46,6 @@ app.use(compression());
 
 // Static files (templates)
 const templatesPath = path.join(__dirname, '../public/templates');
-logger.info('Setting up static files middleware', {
-  templatesPath,
-  exists: fs.existsSync(templatesPath),
-  parentDirExists: fs.existsSync(path.join(__dirname, '../public')),
-  __dirname,
-});
 app.use('/templates', express.static(templatesPath));
 
 // HTTP request logging
