@@ -43,6 +43,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Compression
 app.use(compression());
 
+// Static files (templates)
+app.use('/templates', express.static('public/templates'));
+
 // HTTP request logging
 if (NODE_ENV === 'development') {
   app.use(morgan('dev'));
