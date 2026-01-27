@@ -3,6 +3,7 @@ import { authenticateRequest, requirePermission, AuthenticatedRequest } from '..
 import { Permission } from '../../../utils/permissions';
 import { supabaseAdmin } from '../../../config/database.config';
 import { logger } from '../../../utils/logger';
+import analyticsService from '../../../services/analytics.service';
 
 const router = Router();
 router.use(authenticateRequest);
@@ -421,6 +422,181 @@ router.post('/reports/export', requirePermission(Permission.EXPORT_REPORTS), asy
   } catch (error: any) {
     logger.error('Error exporting reports', { error: error.message });
     res.status(500).json({ success: false, error: 'Failed to export reports' });
+  }
+});
+
+// ============================================================================
+// Rate Management & Quotation Analytics (Phase 7)
+// ============================================================================
+
+/**
+ * GET /api/v1/analytics/rate-cards
+ * Get rate card performance metrics
+ */
+router.get('/rate-cards', requirePermission(Permission.VIEW_ANALYTICS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { dateFrom, dateTo } = req.query;
+
+    const from = dateFrom ? new Date(dateFrom as string) : undefined;
+    const to = dateTo ? new Date(dateTo as string) : undefined;
+
+    const performance = await analyticsService.getRateCardPerformance(from, to);
+
+    res.json({
+      success: true,
+      data: performance,
+      count: performance.length,
+    });
+  } catch (error: any) {
+    logger.error('Error in GET /analytics/rate-cards', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch rate card analytics',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/analytics/shippers
+ * Get shipper performance metrics
+ */
+router.get('/shippers', requirePermission(Permission.VIEW_ANALYTICS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const performance = await analyticsService.getShipperPerformance();
+
+    res.json({
+      success: true,
+      data: performance,
+      count: performance.length,
+    });
+  } catch (error: any) {
+    logger.error('Error in GET /analytics/shippers', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch shipper analytics',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/analytics/quotes
+ * Get quote analytics
+ */
+router.get('/quotes', requirePermission(Permission.VIEW_ANALYTICS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { dateFrom, dateTo } = req.query;
+
+    const from = dateFrom ? new Date(dateFrom as string) : undefined;
+    const to = dateTo ? new Date(dateTo as string) : undefined;
+
+    const analytics = await analyticsService.getQuoteAnalytics(from, to);
+
+    res.json({
+      success: true,
+      data: analytics,
+    });
+  } catch (error: any) {
+    logger.error('Error in GET /analytics/quotes', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch quote analytics',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/analytics/expiring-rate-cards
+ * Get expiring rate cards
+ */
+router.get('/expiring-rate-cards', requirePermission(Permission.VIEW_ANALYTICS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { days } = req.query;
+    const daysThreshold = days ? parseInt(days as string) : 30;
+
+    const expiring = await analyticsService.getExpiringRateCards(daysThreshold);
+
+    res.json({
+      success: true,
+      data: expiring,
+      count: expiring.length,
+    });
+  } catch (error: any) {
+    logger.error('Error in GET /analytics/expiring-rate-cards', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch expiring rate cards',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/analytics/margin
+ * Get margin analysis
+ */
+router.get('/margin', requirePermission(Permission.VIEW_ANALYTICS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { dateFrom, dateTo } = req.query;
+
+    const from = dateFrom ? new Date(dateFrom as string) : undefined;
+    const to = dateTo ? new Date(dateTo as string) : undefined;
+
+    const analysis = await analyticsService.getMarginAnalysis(from, to);
+
+    res.json({
+      success: true,
+      data: analysis,
+    });
+  } catch (error: any) {
+    logger.error('Error in GET /analytics/margin', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch margin analysis',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/analytics/rate-dashboard
+ * Get comprehensive rate management dashboard data
+ */
+router.get('/rate-dashboard', requirePermission(Permission.VIEW_ANALYTICS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { dateFrom, dateTo, days } = req.query;
+
+    const from = dateFrom ? new Date(dateFrom as string) : undefined;
+    const to = dateTo ? new Date(dateTo as string) : undefined;
+    const daysThreshold = days ? parseInt(days as string) : 30;
+
+    // Fetch all analytics in parallel
+    const [quoteAnalytics, marginAnalysis, expiringRateCards, shipperPerformance] =
+      await Promise.all([
+        analyticsService.getQuoteAnalytics(from, to),
+        analyticsService.getMarginAnalysis(from, to),
+        analyticsService.getExpiringRateCards(daysThreshold),
+        analyticsService.getShipperPerformance(),
+      ]);
+
+    res.json({
+      success: true,
+      data: {
+        quotes: quoteAnalytics,
+        margin: marginAnalysis,
+        expiring_rate_cards: {
+          cards: expiringRateCards.slice(0, 10), // Top 10 most urgent
+          total_count: expiringRateCards.length,
+        },
+        shippers: {
+          performance: shipperPerformance.slice(0, 10), // Top 10 shippers
+          total_count: shipperPerformance.length,
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error('Error in GET /analytics/rate-dashboard', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch rate dashboard analytics',
+    });
   }
 });
 

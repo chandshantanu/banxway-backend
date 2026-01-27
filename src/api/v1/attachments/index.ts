@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import { authMiddleware } from '../../../middleware/auth.middleware';
+import { authenticateRequest } from '../../../middleware/auth.middleware';
 import { supabaseAdmin } from '../../../config/database.config';
 import { logger } from '../../../utils/logger';
 
@@ -18,7 +18,7 @@ const upload = multer({
  * POST /api/v1/attachments/upload
  * Upload a file to Supabase Storage
  */
-router.post('/upload', authMiddleware, upload.single('file'), async (req: Request, res: Response) => {
+router.post('/upload', authenticateRequest, upload.single('file'), async (req: Request, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({

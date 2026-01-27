@@ -20,17 +20,28 @@ router.use('/phone-numbers', phoneNumbersRouter);
 // Configuration status endpoint - check what's configured
 router.get('/configuration-status', async (req, res) => {
   try {
-    const orgId = (req as any).user?.organizationId || (req as any).user?.organization_id || 'default-org';
+    const orgId = (req as any).user?.organizationId || (req as any).user?.organization_id;
 
     // Get active email accounts
     const accounts = await emailAccountService.getAllAccounts(false);
     const activeAccounts = accounts.filter(a => a.is_active);
 
-    // Get integrations
-    const integrations = await integrationsService.listIntegrations(orgId);
-    const phoneIntegration = integrations.find(i => i.integration_type === 'exotel_phone' && i.is_verified);
-    const whatsappIntegration = integrations.find(i => i.integration_type === 'exotel_whatsapp' && i.is_verified);
-    const smsIntegration = integrations.find(i => i.integration_type === 'exotel_sms' && i.is_verified);
+    // Get integrations (only if authenticated with valid orgId)
+    let phoneIntegration = null;
+    let whatsappIntegration = null;
+    let smsIntegration = null;
+
+    if (orgId) {
+      try {
+        const integrations = await integrationsService.listIntegrations(orgId);
+        phoneIntegration = integrations.find(i => i.integration_type === 'exotel_phone' && i.is_verified);
+        whatsappIntegration = integrations.find(i => i.integration_type === 'exotel_whatsapp' && i.is_verified);
+        smsIntegration = integrations.find(i => i.integration_type === 'exotel_sms' && i.is_verified);
+      } catch (integrationError: any) {
+        // Log but don't fail the entire endpoint
+        logger.debug('Could not fetch integrations', { error: integrationError.message });
+      }
+    }
 
     res.json({
       success: true,

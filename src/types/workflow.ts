@@ -516,6 +516,7 @@ export interface ExotelWebhookPayload {
   MessageStatus?: string;
   Body?: string;
   MediaUrl?: string;
+  ErrorMessage?: string;
 
   // SMS webhooks
   SmsSid?: string;

@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  espocrm-db:
+    image: mysql:8.0
+    container_name: espocrm-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${ESPOCRM_DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: espocrm
+      MYSQL_USER: espocrm
+      MYSQL_PASSWORD: ${ESPOCRM_DB_PASSWORD}
+    volumes:
+      - espocrm-db-data:/var/lib/mysql
+    networks:
+      - espocrm-network
+    command: --default-authentication-plugin=mysql_native_password
+
+  espocrm:
+    image: espocrm/espocrm:latest
+    container_name: espocrm-app
+    restart: unless-stopped
+    environment:
+      # Database Configuration
+      ESPOCRM_DATABASE_HOST: espocrm-db
+      ESPOCRM_DATABASE_NAME: espocrm
+      ESPOCRM_DATABASE_USER: espocrm
+      ESPOCRM_DATABASE_PASSWORD: ${ESPOCRM_DB_PASSWORD}
+
+      # Site Configuration
+      ESPOCRM_SITE_URL: ${ESPOCRM_SITE_URL}
+
+      # Admin Configuration
+      ESPOCRM_ADMIN_USERNAME: ${ESPOCRM_ADMIN_USERNAME}
+      ESPOCRM_ADMIN_PASSWORD: ${ESPOCRM_ADMIN_PASSWORD}
+
+      # SMTP Configuration (Optional)
+      ESPOCRM_SMTP_HOST: ${ESPOCRM_SMTP_HOST:-}
+      ESPOCRM_SMTP_PORT: ${ESPOCRM_SMTP_PORT:-587}
+      ESPOCRM_SMTP_USERNAME: ${ESPOCRM_SMTP_USERNAME:-}
+      ESPOCRM_SMTP_PASSWORD: ${ESPOCRM_SMTP_PASSWORD:-}
+      ESPOCRM_SMTP_SECURITY: ${ESPOCRM_SMTP_SECURITY:-TLS}
+    ports:
+      - "${ESPOCRM_PORT:-8080}:80"
+    volumes:
+      - espocrm-data:/var/www/html
+    networks:
+      - espocrm-network
+    depends_on:
+      - espocrm-db
+
+  # Optional: phpMyAdmin for database management
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: espocrm-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: espocrm-db
+      PMA_USER: espocrm
+      PMA_PASSWORD: ${ESPOCRM_DB_PASSWORD}
+    ports:
+      - "${PHPMYADMIN_PORT:-8081}:80"
+    networks:
+      - espocrm-network
+    depends_on:
+      - espocrm-db
+
+networks:
+  espocrm-network:
+    driver: bridge
+
+volumes:
+  espocrm-db-data:
+    driver: local
+  espocrm-data:
+    driver: local

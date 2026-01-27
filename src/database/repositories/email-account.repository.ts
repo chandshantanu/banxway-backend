@@ -233,68 +233,152 @@ class EmailAccountRepository {
    * Get decrypted password for an account
    */
   async getDecryptedPassword(accountId: string, type: 'smtp' | 'imap'): Promise<string> {
+    logger.debug('Getting decrypted password', { accountId, type });
+
     const column = type === 'smtp' ? 'smtp_pass_encrypted' : 'imap_pass_encrypted';
+    const account = await this.findById(accountId);
 
-    const { data, error } = await supabaseAdmin.rpc('decrypt_email_password', {
-      encrypted: (await this.findById(accountId))?.[column],
-    });
-
-    if (error) {
-      logger.error('Error decrypting password', { accountId, type, error: error.message });
-      throw error;
+    if (!account) {
+      logger.warn('Account not found for decryption', { accountId });
+      throw new Error('Account not found');
     }
 
-    return data as string;
+    try {
+      const { data, error } = await supabaseAdmin.rpc('decrypt_email_password', {
+        encrypted: account[column],
+      });
+
+      if (error) {
+        logger.error('Error decrypting password via RPC', {
+          accountId,
+          type,
+          error: error.message,
+          code: error.code,
+        });
+        throw error;
+      }
+
+      logger.debug('Password decrypted successfully', { accountId, type });
+      return data as string;
+    } catch (error: any) {
+      logger.error('Failed to decrypt password', {
+        accountId,
+        type,
+        error: error.message,
+      });
+      throw error;
+    }
   }
 
   /**
    * Get account with decrypted passwords (for polling/sending)
    */
   async getWithDecryptedPasswords(accountId: string): Promise<EmailAccountDecrypted | null> {
+    logger.info('Getting account with decrypted passwords', { accountId });
+
     const account = await this.findById(accountId);
-    if (!account) return null;
-
-    // Decrypt passwords using PostgreSQL function
-    const [smtpResult, imapResult] = await Promise.all([
-      supabaseAdmin.rpc('decrypt_email_password', { encrypted: account.smtp_pass_encrypted }),
-      supabaseAdmin.rpc('decrypt_email_password', { encrypted: account.imap_pass_encrypted }),
-    ]);
-
-    if (smtpResult.error || imapResult.error) {
-      logger.error('Error decrypting passwords', {
-        accountId,
-        smtpError: smtpResult.error?.message,
-        imapError: imapResult.error?.message,
-      });
-      throw smtpResult.error || imapResult.error;
+    if (!account) {
+      logger.warn('Account not found for decryption', { accountId });
+      return null;
     }
 
-    const { smtp_pass_encrypted, imap_pass_encrypted, ...accountWithoutPasswords } = account;
+    try {
+      logger.debug('Decrypting passwords via RPC', {
+        accountId,
+        email: account.email,
+        hasSmtpPassword: !!account.smtp_pass_encrypted,
+        hasImapPassword: !!account.imap_pass_encrypted,
+      });
 
-    return {
-      ...accountWithoutPasswords,
-      smtp_password: smtpResult.data as string,
-      imap_password: imapResult.data as string,
-    };
+      // Decrypt passwords using PostgreSQL function via Supabase RPC
+      const [smtpResult, imapResult] = await Promise.all([
+        supabaseAdmin.rpc('decrypt_email_password', { encrypted: account.smtp_pass_encrypted }),
+        supabaseAdmin.rpc('decrypt_email_password', { encrypted: account.imap_pass_encrypted }),
+      ]);
+
+      if (smtpResult.error || imapResult.error) {
+        logger.error('Error decrypting passwords via RPC', {
+          accountId,
+          email: account.email,
+          smtpError: smtpResult.error?.message,
+          smtpCode: smtpResult.error?.code,
+          imapError: imapResult.error?.message,
+          imapCode: imapResult.error?.code,
+        });
+        throw smtpResult.error || imapResult.error;
+      }
+
+      logger.info('Passwords decrypted successfully', {
+        accountId,
+        email: account.email,
+        smtpPasswordLength: (smtpResult.data as string)?.length || 0,
+        imapPasswordLength: (imapResult.data as string)?.length || 0,
+      });
+
+      const { smtp_pass_encrypted, imap_pass_encrypted, ...accountWithoutPasswords } = account;
+
+      return {
+        ...accountWithoutPasswords,
+        smtp_password: smtpResult.data as string,
+        imap_password: imapResult.data as string,
+      };
+    } catch (error: any) {
+      logger.error('Failed to get account with decrypted passwords', {
+        accountId,
+        email: account.email,
+        error: error.message,
+        stack: error.stack,
+      });
+      throw error;
+    }
   }
 
   /**
    * Create a new email account
    */
   async create(accountData: CreateEmailAccountRequest, userId?: string): Promise<EmailAccount> {
-    // Encrypt passwords using PostgreSQL function
-    const [smtpEncrypted, imapEncrypted] = await Promise.all([
-      supabaseAdmin.rpc('encrypt_email_password', { password: accountData.smtp_password }),
-      supabaseAdmin.rpc('encrypt_email_password', { password: accountData.imap_password }),
-    ]);
+    logger.info('Creating new email account', {
+      email: accountData.email,
+      name: accountData.name,
+      smtp_enabled: accountData.smtp_enabled,
+      imap_enabled: accountData.imap_enabled,
+      userId,
+    });
 
-    if (smtpEncrypted.error || imapEncrypted.error) {
-      logger.error('Error encrypting passwords', {
-        smtpError: smtpEncrypted.error?.message,
-        imapError: imapEncrypted.error?.message,
+    try {
+      logger.debug('Encrypting passwords via RPC', {
+        email: accountData.email,
+        hasSmtpPassword: !!accountData.smtp_password,
+        hasImapPassword: !!accountData.imap_password,
+        smtpPasswordLength: accountData.smtp_password?.length || 0,
+        imapPasswordLength: accountData.imap_password?.length || 0,
       });
-      throw smtpEncrypted.error || imapEncrypted.error;
-    }
+
+      // Encrypt passwords using Supabase RPC
+      const [smtpResult, imapResult] = await Promise.all([
+        supabaseAdmin.rpc('encrypt_email_password', { password: accountData.smtp_password }),
+        supabaseAdmin.rpc('encrypt_email_password', { password: accountData.imap_password }),
+      ]);
+
+      if (smtpResult.error || imapResult.error) {
+        logger.error('Error encrypting passwords via RPC', {
+          email: accountData.email,
+          smtpError: smtpResult.error?.message,
+          smtpCode: smtpResult.error?.code,
+          imapError: imapResult.error?.message,
+          imapCode: imapResult.error?.code,
+        });
+        throw smtpResult.error || imapResult.error;
+      }
+
+      const smtpEncrypted = smtpResult.data as string;
+      const imapEncrypted = imapResult.data as string;
+
+      logger.debug('Passwords encrypted successfully', {
+        email: accountData.email,
+        smtpEncryptedLength: smtpEncrypted?.length || 0,
+        imapEncryptedLength: imapEncrypted?.length || 0,
+      });
 
     // If this is the first account or marked as default, ensure only one default
     if (accountData.is_default) {
@@ -307,13 +391,13 @@ class EmailAccountRepository {
       smtp_host: accountData.smtp_host || 'smtp.zoho.com',
       smtp_port: accountData.smtp_port || 587,
       smtp_user: accountData.smtp_user,
-      smtp_pass_encrypted: smtpEncrypted.data,
+      smtp_pass_encrypted: smtpEncrypted,
       smtp_secure: accountData.smtp_secure || false,
       smtp_enabled: accountData.smtp_enabled !== false,
       imap_host: accountData.imap_host || 'imap.zoho.com',
       imap_port: accountData.imap_port || 993,
       imap_user: accountData.imap_user,
-      imap_pass_encrypted: imapEncrypted.data,
+      imap_pass_encrypted: imapEncrypted,
       imap_tls: accountData.imap_tls !== false,
       imap_enabled: accountData.imap_enabled !== false,
       poll_interval_ms: accountData.poll_interval_ms || 30000,
@@ -326,6 +410,14 @@ class EmailAccountRepository {
       created_by: userId || null,
     };
 
+    logger.debug('Inserting email account into database', {
+      email: newAccount.email,
+      name: newAccount.name,
+      smtp_enabled: newAccount.smtp_enabled,
+      imap_enabled: newAccount.imap_enabled,
+      is_default: newAccount.is_default,
+    });
+
     const { data, error } = await supabaseAdmin
       .from('email_accounts')
       .insert(newAccount)
@@ -333,54 +425,144 @@ class EmailAccountRepository {
       .single();
 
     if (error) {
-      logger.error('Error creating email account', { error: error.message });
+      logger.error('Error creating email account', {
+        email: newAccount.email,
+        error: error.message,
+        code: error.code,
+      });
       throw error;
     }
 
-    logger.info('Email account created', { id: data.id, email: data.email });
+    logger.info('Email account created successfully', {
+      id: data.id,
+      email: data.email,
+      name: data.name,
+      smtp_enabled: data.smtp_enabled,
+      imap_enabled: data.imap_enabled,
+    });
     return data as EmailAccount;
+  } catch (error: any) {
+    logger.error('Failed to create email account', {
+      email: accountData.email,
+      error: error.message,
+      stack: error.stack,
+    });
+    throw error;
+  }
   }
 
   /**
    * Update an email account
    */
   async update(id: string, updates: UpdateEmailAccountRequest): Promise<EmailAccount> {
-    const updateData: any = { ...updates };
+    logger.info('Updating email account', {
+      id,
+      hasSmtpPassword: !!updates.smtp_password,
+      hasImapPassword: !!updates.imap_password,
+      fields: Object.keys(updates),
+    });
 
-    // Handle password updates
-    if (updates.smtp_password) {
-      const result = await supabaseAdmin.rpc('encrypt_email_password', { password: updates.smtp_password });
-      if (result.error) throw result.error;
-      updateData.smtp_pass_encrypted = result.data;
-      delete updateData.smtp_password;
-    }
+    try {
+      const updateData: any = { ...updates };
 
-    if (updates.imap_password) {
-      const result = await supabaseAdmin.rpc('encrypt_email_password', { password: updates.imap_password });
-      if (result.error) throw result.error;
-      updateData.imap_pass_encrypted = result.data;
-      delete updateData.imap_password;
-    }
+      // Handle password updates with RPC encryption
+      if (updates.smtp_password) {
+        logger.debug('Encrypting SMTP password via RPC', {
+          id,
+          smtpPasswordLength: updates.smtp_password.length,
+        });
 
-    // Handle default flag
-    if (updates.is_default) {
-      await this.clearDefaultFlag();
-    }
+        const smtpResult = await supabaseAdmin.rpc('encrypt_email_password', {
+          password: updates.smtp_password,
+        });
 
-    const { data, error } = await supabaseAdmin
-      .from('email_accounts')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
+        if (smtpResult.error) {
+          logger.error('Error encrypting SMTP password via RPC', {
+            id,
+            error: smtpResult.error.message,
+            code: smtpResult.error.code,
+          });
+          throw smtpResult.error;
+        }
 
-    if (error) {
-      logger.error('Error updating email account', { id, error: error.message });
+        updateData.smtp_pass_encrypted = smtpResult.data as string;
+        delete updateData.smtp_password;
+
+        logger.debug('SMTP password encrypted successfully', {
+          id,
+          encryptedLength: (smtpResult.data as string)?.length || 0,
+        });
+      }
+
+      if (updates.imap_password) {
+        logger.debug('Encrypting IMAP password via RPC', {
+          id,
+          imapPasswordLength: updates.imap_password.length,
+        });
+
+        const imapResult = await supabaseAdmin.rpc('encrypt_email_password', {
+          password: updates.imap_password,
+        });
+
+        if (imapResult.error) {
+          logger.error('Error encrypting IMAP password via RPC', {
+            id,
+            error: imapResult.error.message,
+            code: imapResult.error.code,
+          });
+          throw imapResult.error;
+        }
+
+        updateData.imap_pass_encrypted = imapResult.data as string;
+        delete updateData.imap_password;
+
+        logger.debug('IMAP password encrypted successfully', {
+          id,
+          encryptedLength: (imapResult.data as string)?.length || 0,
+        });
+      }
+
+      // Handle default flag
+      if (updates.is_default) {
+        logger.debug('Clearing default flag from other accounts', { id });
+        await this.clearDefaultFlag();
+      }
+
+      logger.debug('Updating email account in database', {
+        id,
+        fields: Object.keys(updateData),
+      });
+
+      const { data, error } = await supabaseAdmin
+        .from('email_accounts')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Error updating email account', {
+          id,
+          error: error.message,
+          code: error.code,
+        });
+        throw error;
+      }
+
+      logger.info('Email account updated successfully', {
+        id,
+        email: data.email,
+        updatedFields: Object.keys(updateData),
+      });
+      return data as EmailAccount;
+    } catch (error: any) {
+      logger.error('Failed to update email account', {
+        id,
+        error: error.message,
+        stack: error.stack,
+      });
       throw error;
     }
-
-    logger.info('Email account updated', { id });
-    return data as EmailAccount;
   }
 
   /**

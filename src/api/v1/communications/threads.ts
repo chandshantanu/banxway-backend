@@ -7,6 +7,7 @@ import { ApiResponse, ThreadType, Priority, Channel, ThreadStatus, CreateThreadR
 import { logger } from '../../../utils/logger';
 import { io } from '../../../index';
 import { Permission } from '../../../utils/permissions';
+import { supabaseAdmin } from '../../../config/database.config';
 
 const router = Router();
 
@@ -183,6 +184,80 @@ router.post('/:id/unfollow', requirePermission(Permission.VIEW_THREADS), async (
     res.json(response);
   } catch (error) {
     logger.error('Error unfollowing thread', { error, id: req.params.id });
+    throw error;
+  }
+});
+
+// POST /api/v1/communications/threads/:id/messages - Send message to thread
+router.post('/:id/messages', requirePermission(Permission.SEND_MESSAGES), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const threadId = req.params.id;
+    const { content, sender_type, channel } = req.body;
+
+    if (!content || !sender_type || !channel) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'content, sender_type, and channel are required',
+        },
+      });
+      return;
+    }
+
+    // Verify thread exists
+    const thread = await threadRepository.findById(threadId);
+
+    // Create message
+    const { data: message, error } = await supabaseAdmin
+      .from('communication_messages')
+      .insert({
+        thread_id: threadId,
+        channel: channel,
+        direction: 'OUTBOUND',
+        content: content,
+        sender_type: sender_type,
+        sender_id: req.user!.id,
+        from_address: req.user!.email || '',
+        to_addresses: [],
+        status: 'SENT',
+        sent_at: new Date().toISOString(),
+        sent_by: req.user!.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error creating message', { error: error.message, threadId });
+      throw error;
+    }
+
+    // Update thread timestamps
+    await threadRepository.update(threadId, {
+      last_activity_at: new Date().toISOString(),
+      last_message_at: new Date().toISOString(),
+    } as any);
+
+    // Emit WebSocket event
+    io.to(`thread:${threadId}`).emit('thread:message', {
+      threadId,
+      message,
+    });
+
+    logger.info('Message sent successfully', {
+      messageId: message.id,
+      threadId,
+      channel,
+    });
+
+    const response: ApiResponse = {
+      success: true,
+      data: message,
+    };
+
+    res.json(response);
+  } catch (error) {
+    logger.error('Error sending message', { error, id: req.params.id });
     throw error;
   }
 });

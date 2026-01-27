@@ -51,8 +51,7 @@ async function sendWhatsAppMessage(data: any): Promise<void> {
   try {
     const result = await exotelWhatsApp.sendTextMessage({
       to,
-      from: process.env.EXOTEL_WHATSAPP_NUMBER!,
-      message: text,
+      text,
     });
 
     // Update message with external ID
@@ -103,7 +102,6 @@ async function sendMediaMessage(data: any): Promise<void> {
       case 'image':
         result = await exotelWhatsApp.sendImage({
           to,
-          from: process.env.EXOTEL_WHATSAPP_NUMBER!,
           imageUrl: mediaUrl,
           caption,
         });
@@ -111,22 +109,20 @@ async function sendMediaMessage(data: any): Promise<void> {
       case 'document':
         result = await exotelWhatsApp.sendDocument({
           to,
-          from: process.env.EXOTEL_WHATSAPP_NUMBER!,
           documentUrl: mediaUrl,
+          filename: mediaUrl.split('/').pop() || 'document',
           caption,
         });
         break;
       case 'audio':
         result = await exotelWhatsApp.sendAudio({
           to,
-          from: process.env.EXOTEL_WHATSAPP_NUMBER!,
           audioUrl: mediaUrl,
         });
         break;
       case 'video':
         result = await exotelWhatsApp.sendVideo({
           to,
-          from: process.env.EXOTEL_WHATSAPP_NUMBER!,
           videoUrl: mediaUrl,
           caption,
         });
@@ -178,10 +174,9 @@ async function sendTemplateMessage(data: any): Promise<void> {
   try {
     const result = await exotelWhatsApp.sendTemplate({
       to,
-      from: process.env.EXOTEL_WHATSAPP_NUMBER!,
       templateName,
       language,
-      variables,
+      components: variables,
     });
 
     await supabaseAdmin

@@ -137,20 +137,6 @@ export class ThreadRepository {
           id,
           full_name,
           email
-        ),
-        communication_messages (
-          id,
-          direction,
-          channel,
-          content,
-          subject,
-          sender_type,
-          sender_id,
-          recipient_type,
-          recipient_id,
-          status,
-          created_at,
-          attachments
         )
       `)
       .eq('id', id)

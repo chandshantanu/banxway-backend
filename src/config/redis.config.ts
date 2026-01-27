@@ -1,10 +1,10 @@
 import { Queue, Worker, QueueEvents } from 'bullmq';
 import Redis from 'ioredis';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+
+// Mask password in URL for logging
+const maskedUrl = redisUrl.replace(/:[^:@]+@/, ':****@');
 
 // Parse Redis URL and configure TLS for Azure Redis
 const redisOptions: any = {
@@ -15,6 +15,7 @@ const redisOptions: any = {
   retryDelayOnTryAgain: 100,
   connectTimeout: 10000,
   commandTimeout: 5000,
+  lazyConnect: true, // Don't connect immediately
 };
 
 // If using Azure Redis with TLS (rediss://)
@@ -26,6 +27,16 @@ if (redisUrl.startsWith('rediss://')) {
 
 // Redis connection for BullMQ
 export const redisConnection = new Redis(redisUrl, redisOptions);
+
+// Log config for debugging (will be called when imported)
+export function logRedisConfig() {
+  return {
+    url: maskedUrl,
+    hasEnvVar: !!process.env.REDIS_URL,
+    envValue: process.env.REDIS_URL ? 'SET' : 'NOT SET',
+    useTLS: redisUrl.startsWith('rediss://'),
+  };
+}
 
 // Define queues
 export const emailQueue = new Queue('email-processing', {

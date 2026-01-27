@@ -13,6 +13,13 @@ import settingsRouter from './settings';
 import queueRouter from './queue';
 import attachmentsRouter from './attachments';
 import testWebhooksRouter from './test/webhooks';
+import debugRouter from './debug';
+import quotationsRouter from './quotations';
+import crmRouter from './crm';
+import excelImportRouter from './excel-import';
+import shippersRouter from './shippers';
+import rateCardsRouter from './rate-cards';
+import shipperQuoteRequestsRouter from './shipper-quote-requests';
 
 const router = Router();
 
@@ -28,8 +35,15 @@ router.use('/analytics', analyticsRouter);
 router.use('/documents', documentsRouter);
 router.use('/webhooks', webhooksRouter);
 router.use('/settings', settingsRouter);
+router.use('/debug', debugRouter);
 router.use('/queue', queueRouter);
 router.use('/attachments', attachmentsRouter);
+router.use('/quotations', quotationsRouter);
+router.use('/crm', crmRouter);
+router.use('/excel-import', excelImportRouter);
+router.use('/shippers', shippersRouter);
+router.use('/rate-cards', rateCardsRouter);
+router.use('/shipper-quote-requests', shipperQuoteRequestsRouter);
 
 // Test endpoints (development only)
 if (process.env.NODE_ENV !== 'production') {
@@ -61,6 +75,11 @@ router.get('/', (req, res) => {
     webhooks: '/api/v1/webhooks',
     settings: '/api/v1/settings',
     queue: '/api/v1/queue',
+    quotations: '/api/v1/quotations',
+    crm: '/api/v1/crm',
+    excelImport: '/api/v1/excel-import',
+    shippers: '/api/v1/shippers',
+    rateCards: '/api/v1/rate-cards',
   };
 
   if (process.env.NODE_ENV !== 'production') {

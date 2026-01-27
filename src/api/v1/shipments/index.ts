@@ -3,6 +3,7 @@ import { authenticateRequest, requirePermission, AuthenticatedRequest } from '..
 import { Permission } from '../../../utils/permissions';
 import { supabaseAdmin } from '../../../config/database.config';
 import { logger } from '../../../utils/logger';
+import shipmentService, { ShipmentError, ShipmentNotFoundError } from '../../../services/shipment.service';
 
 const router = Router();
 router.use(authenticateRequest);
@@ -405,6 +406,123 @@ router.get('/stats/summary', requirePermission(Permission.VIEW_SHIPMENTS), async
   } catch (error: any) {
     logger.error('Error fetching shipment stats', { error: error.message });
     res.status(500).json({ success: false, error: 'Failed to fetch shipment stats' });
+  }
+});
+
+// ============================================================================
+// NEW ENDPOINTS: Stage Management (from new freight workflow implementation)
+// ============================================================================
+
+// Get shipment stage history
+router.get('/:id/history', requirePermission(Permission.VIEW_SHIPMENTS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const history = await shipmentService.getStageHistory(id);
+
+    res.json({
+      success: true,
+      data: history,
+      count: history.length,
+    });
+  } catch (error: any) {
+    if (error instanceof ShipmentNotFoundError) {
+      res.status(404).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
+    logger.error('Error fetching shipment history', { id: req.params.id, error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch shipment history',
+    });
+  }
+});
+
+// Update shipment stage (with automatic history tracking)
+router.patch('/:id/stage', requirePermission(Permission.UPDATE_SHIPMENTS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { stage } = req.body;
+    const userId = req.user?.id;
+
+    if (!stage) {
+      res.status(400).json({
+        success: false,
+        error: 'Stage is required',
+      });
+      return;
+    }
+
+    const shipment = await shipmentService.updateShipmentStage(id, stage, userId);
+
+    res.json({
+      success: true,
+      data: shipment,
+      message: `Shipment stage updated to ${stage}`,
+    });
+  } catch (error: any) {
+    if (error instanceof ShipmentNotFoundError) {
+      res.status(404).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
+    if (error instanceof ShipmentError) {
+      res.status(error.statusCode).json({
+        success: false,
+        error: error.message,
+      });
+      return;
+    }
+
+    logger.error('Error updating shipment stage', { id: req.params.id, error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update shipment stage',
+    });
+  }
+});
+
+// Get shipments by current stage
+router.get('/stage/:stage', requirePermission(Permission.VIEW_SHIPMENTS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { stage } = req.params;
+    const shipments = await shipmentService.getShipmentsByStage(stage as any);
+
+    res.json({
+      success: true,
+      data: shipments,
+      count: shipments.length,
+    });
+  } catch (error: any) {
+    logger.error('Error fetching shipments by stage', { stage: req.params.stage, error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch shipments by stage',
+    });
+  }
+});
+
+// Get stage analytics (average time per stage)
+router.get('/analytics/stages', requirePermission(Permission.VIEW_SHIPMENTS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const analytics = await shipmentService.getStageAnalytics();
+
+    res.json({
+      success: true,
+      data: analytics,
+    });
+  } catch (error: any) {
+    logger.error('Error fetching stage analytics', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch stage analytics',
+    });
   }
 });
 

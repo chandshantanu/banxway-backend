@@ -115,8 +115,16 @@ async function pollInbox(accountId: string): Promise<void> {
           return;
         }
 
-        // Search for unseen emails
-        imap.search(['UNSEEN'], (err, results) => {
+        // Calculate date for configured sync days (default 30)
+        const syncDays = parseInt(process.env.EMAIL_SYNC_DAYS || '30');
+        const syncLimit = parseInt(process.env.EMAIL_SYNC_LIMIT || '500');
+        const syncDate = new Date();
+        syncDate.setDate(syncDate.getDate() - syncDays);
+        const sinceDate = syncDate.toISOString().split('T')[0].replace(/-/g, '-');
+
+        // Search for ALL emails from last N days (not just UNSEEN)
+        // This allows syncing existing emails, duplicate check happens in processEmail
+        imap.search([['SINCE', sinceDate]], (err, results) => {
           if (err) {
             logger.error('Error searching emails', { accountId, error: err.message });
             emailAccountService.updatePollStatus(accountId, 'FAILED', err.message);
@@ -125,16 +133,22 @@ async function pollInbox(accountId: string): Promise<void> {
           }
 
           if (!results || results.length === 0) {
-            logger.debug('No new emails', { accountId, email: account.email });
+            logger.debug(`No emails found in last ${syncDays} days`, { accountId, email: account.email });
             emailAccountService.updatePollStatus(accountId, 'SUCCESS');
             imap.end();
             resolve();
             return;
           }
 
-          logger.info(`Found ${results.length} new email(s)`, { accountId, email: account.email });
+          logger.info(`Found ${results.length} email(s) in last ${syncDays} days`, { accountId, email: account.email });
 
-          const fetch = imap.fetch(results, { bodies: '', markSeen: true });
+          // Limit to most recent N emails to avoid overwhelming the system
+          const emailsToFetch = results.slice(-syncLimit);
+          if (results.length > syncLimit) {
+            logger.info(`Limiting to most recent ${syncLimit} emails (total: ${results.length})`, { accountId });
+          }
+
+          const fetch = imap.fetch(emailsToFetch, { bodies: '', markSeen: false });
 
           fetch.on('message', (msg) => {
             msg.on('body', (stream) => {
@@ -159,7 +173,12 @@ async function pollInbox(accountId: string): Promise<void> {
           });
 
           fetch.once('end', () => {
-            logger.info('Email fetch completed', { accountId, email: account.email });
+            logger.info('Email fetch completed', {
+              accountId,
+              email: account.email,
+              fetched: emailsToFetch.length,
+              total: results.length
+            });
             emailAccountService.updatePollStatus(accountId, 'SUCCESS');
             imap.end();
             resolve();
@@ -195,6 +214,18 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
       subject: parsed.subject,
       messageId: parsed.messageId,
     });
+
+    // Check if message already exists (avoid duplicates)
+    if (parsed.messageId) {
+      const existingMessage = await findMessageByExternalId(parsed.messageId);
+      if (existingMessage) {
+        logger.debug('Email already processed, skipping', {
+          messageId: parsed.messageId,
+          existingId: existingMessage.id,
+        });
+        return; // Skip this email
+      }
+    }
 
     // Find or create customer
     let customer = await findCustomerByEmail(parsed.from.address);
@@ -367,7 +398,7 @@ async function sendEmail(data: any): Promise<void> {
 
     // Prepare email options
     const mailOptions = {
-      from: `"${account.display_name || account.email}" <${account.email}>`,
+      from: `"${account.name || account.email}" <${account.email}>`,
       to: Array.isArray(to) ? to.join(', ') : to,
       cc: cc ? (Array.isArray(cc) ? cc.join(', ') : cc) : undefined,
       bcc: bcc ? (Array.isArray(bcc) ? bcc.join(', ') : bcc) : undefined,
@@ -442,9 +473,12 @@ async function sendEmail(data: any): Promise<void> {
   }
 }
 
-// Schedule polling for all inboxes
-const POLL_INTERVAL = parseInt(process.env.EMAIL_POLL_INTERVAL || '30000');
+// Configuration
+const POLL_INTERVAL = parseInt(process.env.EMAIL_POLL_INTERVAL || '30000'); // 30 seconds default
+const EMAIL_SYNC_DAYS = parseInt(process.env.EMAIL_SYNC_DAYS || '30'); // Sync last 30 days by default
+const EMAIL_SYNC_LIMIT = parseInt(process.env.EMAIL_SYNC_LIMIT || '500'); // Limit to 500 emails per poll
 
+// Schedule polling for all inboxes
 setInterval(() => {
   emailQueue.add('POLL_ALL_INBOXES', { action: 'POLL_ALL_INBOXES' });
 }, POLL_INTERVAL);
@@ -454,6 +488,10 @@ setTimeout(() => {
   emailQueue.add('POLL_ALL_INBOXES', { action: 'POLL_ALL_INBOXES' });
 }, 5000);
 
-logger.info('Email poller worker started (multi-account mode)', { pollInterval: POLL_INTERVAL });
+logger.info('Email poller worker started (multi-account mode)', {
+  pollInterval: POLL_INTERVAL,
+  syncDays: EMAIL_SYNC_DAYS,
+  syncLimit: EMAIL_SYNC_LIMIT
+});
 
 export default emailWorker;

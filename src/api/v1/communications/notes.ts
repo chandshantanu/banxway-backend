@@ -1,6 +1,6 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import noteRepository from '../../../database/repositories/note.repository';
-import { authMiddleware } from '../../../middleware/auth.middleware';
+import { authenticateRequest, AuthenticatedRequest } from '../../../middleware/auth.middleware';
 import { logger } from '../../../utils/logger';
 
 const router = Router();
@@ -9,7 +9,7 @@ const router = Router();
  * GET /api/v1/communications/notes?threadId=xxx
  * List notes for a thread
  */
-router.get('/', authMiddleware, async (req: Request, res: Response) => {
+router.get('/', authenticateRequest, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { threadId } = req.query;
 
@@ -40,7 +40,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
  * POST /api/v1/communications/notes
  * Create a note
  */
-router.post('/', authMiddleware, async (req: Request, res: Response) => {
+router.post('/', authenticateRequest, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { thread_id, content, is_pinned } = req.body;
 
@@ -70,7 +70,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
  * PATCH /api/v1/communications/notes/:id
  * Update a note
  */
-router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
+router.patch('/:id', authenticateRequest, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { content, is_pinned } = req.body;
@@ -94,7 +94,7 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
  * DELETE /api/v1/communications/notes/:id
  * Delete a note
  */
-router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
+router.delete('/:id', authenticateRequest, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -114,7 +114,7 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
  * POST /api/v1/communications/notes/:id/toggle-pin
  * Toggle note pin status
  */
-router.post('/:id/toggle-pin', authMiddleware, async (req: Request, res: Response) => {
+router.post('/:id/toggle-pin', authenticateRequest, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
 

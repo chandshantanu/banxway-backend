@@ -119,15 +119,33 @@ async function startServer() {
     let redisConnected = false;
     try {
       logger.info('Testing Redis connection...');
-      const { redisConnection } = require('./config/redis.config');
+
+      const { redisConnection, logRedisConfig } = require('./config/redis.config');
+      const redisConfig = logRedisConfig();
+
+      logger.info('Redis configuration', redisConfig);
+
+      // Explicitly connect (since we set lazyConnect: true)
+      logger.info('Connecting to Redis...');
+      await redisConnection.connect();
+
+      // Test with ping
+      logger.info('Pinging Redis...');
       await Promise.race([
         redisConnection.ping(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Redis connection timeout')), 10000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Redis ping timeout')), 10000))
       ]);
       logger.info('Redis connection successful');
       redisConnected = true;
     } catch (redisError: any) {
-      logger.warn('Redis connection failed (non-fatal)', { error: redisError.message });
+      logger.warn('Redis connection failed (non-fatal)', {
+        error: redisError.message,
+        code: redisError.code,
+        errno: redisError.errno,
+        syscall: redisError.syscall,
+        address: redisError.address,
+        port: redisError.port
+      });
       logger.warn('Background workers will be disabled');
     }
 
