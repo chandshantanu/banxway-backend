@@ -1,7 +1,12 @@
 import { Queue, Worker, QueueEvents } from 'bullmq';
 import Redis from 'ioredis';
 
+// DEBUG: Check if REDIS_URL is set - write directly to stderr so it shows in logs
+process.stderr.write(`[REDIS-DEBUG] REDIS_URL env: ${process.env.REDIS_URL ? 'SET-length-' + process.env.REDIS_URL.length : 'NOT-SET'}\n`);
+process.stderr.write(`[REDIS-DEBUG] REDIS env keys: ${Object.keys(process.env).filter(k => k.toUpperCase().includes('REDIS')).join(',')}\n`);
+
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+process.stderr.write(`[REDIS-DEBUG] Using URL: ${redisUrl.substring(0, 30)}...\n`);
 
 // Mask password in URL for logging
 const maskedUrl = redisUrl.replace(/:[^:@]+@/, ':****@');
