@@ -1,0 +1,4 @@
+Customer Code,Full Name,Email,Phone,Mobile,WhatsApp,Designation,Department,Is Primary,Is Decision Maker,Preferred Channel,Notes
+CUST001,John Smith,john.smith@acme.com,+91-9876543210,+91-9876543210,+91-9876543210,CEO,Management,Yes,Yes,EMAIL,Primary contact for Acme
+CUST001,Jane Doe,jane.doe@acme.com,+91-9876543211,+91-9876543211,+91-9876543211,Operations Manager,Operations,No,Yes,WHATSAPP,Operations contact
+CUST002,Bob Johnson,bob@globalimports.com,+91-9876543212,+91-9876543212,+91-9876543212,Director,Management,Yes,Yes,EMAIL,Primary contact for Global Imports

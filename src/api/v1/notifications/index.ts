@@ -1,10 +1,12 @@
 import { Router, Response } from 'express';
 import { authenticateRequest, AuthenticatedRequest } from '../../../middleware/auth.middleware';
+import { pollingRateLimiter } from '../../../middleware/rate-limit.middleware';
 import notificationRepository from '../../../database/repositories/notification.repository';
 import { logger } from '../../../utils/logger';
 
 const router = Router();
 router.use(authenticateRequest);
+router.use(pollingRateLimiter); // Apply higher rate limit for polling endpoints
 
 /**
  * GET /api/v1/notifications

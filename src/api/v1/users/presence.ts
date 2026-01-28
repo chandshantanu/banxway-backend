@@ -1,12 +1,14 @@
 import { Router, Response } from 'express';
 import { supabase } from '../../../config/database.config';
 import { AuthenticatedRequest, authenticateRequest } from '../../../middleware/auth.middleware';
+import { pollingRateLimiter } from '../../../middleware/rate-limit.middleware';
 import { logger } from '../../../utils/logger';
 
 const router = Router();
 
 // Middleware
 router.use(authenticateRequest);
+router.use(pollingRateLimiter); // Apply higher rate limit for polling endpoints
 
 /**
  * Get online users (users active in the last 5 minutes)

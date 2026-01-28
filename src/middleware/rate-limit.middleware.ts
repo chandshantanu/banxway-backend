@@ -33,3 +33,25 @@ export const authRateLimiter = rateLimit({
   max: 5,
   message: 'Too many authentication attempts, please try again later.',
 });
+
+// Polling rate limiter for presence/notification endpoints
+// These endpoints are polled frequently by frontend and need higher limits
+// Calculation: ~67.5 requests per user per 15 min (notifications:30, online:30, heartbeat:7.5)
+// Setting to 300 allows for ~4 concurrent users or multiple browser tabs
+export const pollingRateLimiter = rateLimit({
+  windowMs: windowMs, // Use same window as global (15 minutes)
+  max: parseInt(process.env.POLLING_RATE_LIMIT_MAX || '300'),
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    const response: ApiResponse = {
+      success: false,
+      error: {
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'Too many requests from this IP, please try again later.',
+      },
+    };
+    res.status(429).json(response);
+  },
+});
