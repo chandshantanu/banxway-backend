@@ -1,6 +1,9 @@
 import { Worker } from 'bullmq';
-import { redisConnection, slaQueue } from '../config/redis.config';
+import { getRedisConnection, getSlaQueue } from '../config/redis.config';
 import { logger } from '../utils/logger';
+
+// Get queue (lazy initialization)
+const slaQueue = getSlaQueue();
 
 // Worker to check SLA deadlines
 const slaWorker = new Worker(
@@ -15,7 +18,7 @@ const slaWorker = new Worker(
 
     return { checked: 0, warnings: 0 };
   },
-  { connection: redisConnection }
+  { connection: getRedisConnection() }
 );
 
 slaWorker.on('completed', (job, result) => {

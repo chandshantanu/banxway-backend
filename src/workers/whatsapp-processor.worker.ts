@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq';
-import { redisConnection } from '../config/redis.config';
+import { getRedisConnection } from '../config/redis.config';
 import exotelWhatsApp from '../services/exotel/whatsapp.service';
 import { supabaseAdmin } from '../config/database.config';
 import { logger } from '../utils/logger';
@@ -27,7 +27,7 @@ const whatsappWorker = new Worker(
         throw new Error(`Unknown action: ${action}`);
     }
   },
-  { connection: redisConnection }
+  { connection: getRedisConnection() }
 );
 
 whatsappWorker.on('completed', (job) => {

@@ -125,10 +125,13 @@ async function startServer() {
     try {
       logger.info('Testing Redis connection...');
 
-      const { redisConnection, logRedisConfig } = require('./config/redis.config');
+      const { getRedisConnection, logRedisConfig } = require('./config/redis.config');
       const redisConfig = logRedisConfig();
 
       logger.info('Redis configuration', redisConfig);
+
+      // Get Redis connection (lazy initialization happens here)
+      const redisConnection = getRedisConnection();
 
       // Explicitly connect (since we set lazyConnect: true)
       logger.info('Connecting to Redis...');
@@ -199,7 +202,8 @@ process.on('SIGTERM', async () => {
     logger.info('HTTP server closed');
   });
 
-  const { redisConnection } = require('./config/redis.config');
+  const { getRedisConnection } = require('./config/redis.config');
+  const redisConnection = getRedisConnection();
   await redisConnection.quit();
   logger.info('Redis connection closed');
 
@@ -212,7 +216,8 @@ process.on('SIGINT', async () => {
     logger.info('HTTP server closed');
   });
 
-  const { redisConnection } = require('./config/redis.config');
+  const { getRedisConnection } = require('./config/redis.config');
+  const redisConnection = getRedisConnection();
   await redisConnection.quit();
   logger.info('Redis connection closed');
 

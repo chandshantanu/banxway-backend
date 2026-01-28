@@ -2,7 +2,7 @@ import { Worker } from 'bullmq';
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
-import { redisConnection, emailQueue } from '../config/redis.config';
+import { getRedisConnection, getEmailQueue } from '../config/redis.config';
 import { parseEmailBuffer, findReferenceInSubject } from '../utils/email-parser';
 import threadRepository from '../database/repositories/thread.repository';
 import emailAccountRepository, { EmailAccountDecrypted } from '../database/repositories/email-account.repository';
@@ -11,6 +11,9 @@ import { supabaseAdmin } from '../config/database.config';
 import { logger } from '../utils/logger';
 import { Channel, MessageDirection, ThreadType } from '../types';
 import { io } from '../index';
+
+// Get Redis connection and queue (lazy initialization)
+const emailQueue = getEmailQueue();
 
 // Worker to process email jobs
 const emailWorker = new Worker(
@@ -35,7 +38,7 @@ const emailWorker = new Worker(
         throw new Error(`Unknown action: ${action}`);
     }
   },
-  { connection: redisConnection }
+  { connection: getRedisConnection() }
 );
 
 emailWorker.on('completed', (job) => {
