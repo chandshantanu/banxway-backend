@@ -314,15 +314,3 @@ export type IntegrationNodeConfig =
     | AIGenerateEmailNodeConfig
     | AISuggestNextStepNodeConfig
     | SchemaValidationNodeConfig;
-
-// Export all types
-export type {
-    ManualDataEntryNodeConfig,
-    CRMLookupNodeConfig,
-    CRMUpdateNodeConfig,
-    KYCVerificationNodeConfig,
-    DocumentUploadNodeConfig,
-    AIGenerateEmailNodeConfig,
-    AISuggestNextStepNodeConfig,
-    SchemaValidationNodeConfig,
-};
