@@ -125,9 +125,9 @@ async function pollInbox(accountId: string): Promise<void> {
         syncDate.setDate(syncDate.getDate() - syncDays);
         const sinceDate = syncDate.toISOString().split('T')[0].replace(/-/g, '-');
 
-        // Search for ALL emails from last N days (not just UNSEEN)
-        // This allows syncing existing emails, duplicate check happens in processEmail
-        imap.search([['SINCE', sinceDate]], (err, results) => {
+        // Search for UNSEEN emails from last N days (prevents re-fetching same emails)
+        // This combined with the UNIQUE constraint prevents duplicate processing
+        imap.search([['UNSEEN', 'SINCE', sinceDate]], (err, results) => {
           if (err) {
             logger.error('Error searching emails', { accountId, error: err.message });
             emailAccountService.updatePollStatus(accountId, 'FAILED', err.message);
@@ -280,7 +280,8 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
     }
 
     // Create message with email account reference
-    const message = await supabaseAdmin
+    // Use ON CONFLICT to handle race conditions
+    const { data: message, error: insertError } = await supabaseAdmin
       .from('communication_messages')
       .insert({
         thread_id: thread.id,
@@ -301,23 +302,35 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
       .select()
       .single();
 
-    if (message.data) {
+    // Handle duplicate key error (23505 = unique violation)
+    if (insertError) {
+      if (insertError.code === '23505') {
+        logger.debug('Duplicate email detected by database constraint, skipping', {
+          messageId: parsed.messageId,
+          error: insertError.message,
+        });
+        return; // Skip silently
+      }
+      throw insertError; // Re-throw other errors
+    }
+
+    if (message) {
       logger.info('Email processed successfully', {
         threadId: thread.id,
-        messageId: message.data.id,
+        messageId: message.id,
         accountId,
       });
 
       // Emit WebSocket event
       io.to(`thread:${thread.id}`).emit('thread:message', {
         threadId: thread.id,
-        message: message.data,
+        message: message,
       });
 
       // Emit to inbox for real-time updates
       io.emit('inbox:new-message', {
         threadId: thread.id,
-        message: message.data,
+        message: message,
         account: account ? { id: account.id, name: account.name, email: account.email } : null,
       });
     }
@@ -481,20 +494,23 @@ const POLL_INTERVAL = parseInt(process.env.EMAIL_POLL_INTERVAL || '30000'); // 3
 const EMAIL_SYNC_DAYS = parseInt(process.env.EMAIL_SYNC_DAYS || '30'); // Sync last 30 days by default
 const EMAIL_SYNC_LIMIT = parseInt(process.env.EMAIL_SYNC_LIMIT || '500'); // Limit to 500 emails per poll
 
+// TEMPORARILY DISABLED: Automatic polling causes Redis OOM with current Basic C0 tier (271MB)
+// TODO: Re-enable after upgrading to Standard C1 Redis tier (1GB) or increase polling interval
 // Schedule polling for all inboxes
-setInterval(() => {
-  emailQueue.add('POLL_ALL_INBOXES', { action: 'POLL_ALL_INBOXES' });
-}, POLL_INTERVAL);
+// setInterval(() => {
+//   emailQueue.add('POLL_ALL_INBOXES', { action: 'POLL_ALL_INBOXES' });
+// }, POLL_INTERVAL);
 
 // Initial poll on startup
-setTimeout(() => {
-  emailQueue.add('POLL_ALL_INBOXES', { action: 'POLL_ALL_INBOXES' });
-}, 5000);
+// setTimeout(() => {
+//   emailQueue.add('POLL_ALL_INBOXES', { action: 'POLL_ALL_INBOXES' });
+// }, 5000);
 
-logger.info('Email poller worker started (multi-account mode)', {
-  pollInterval: POLL_INTERVAL,
+logger.info('Email poller worker started (manual mode only - auto-polling disabled due to Redis memory constraints)', {
+  pollInterval: 'DISABLED',
   syncDays: EMAIL_SYNC_DAYS,
-  syncLimit: EMAIL_SYNC_LIMIT
+  syncLimit: EMAIL_SYNC_LIMIT,
+  note: 'Use manual refresh API to poll emails'
 });
 
 export default emailWorker;
