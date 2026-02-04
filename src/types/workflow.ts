@@ -42,6 +42,35 @@ export enum WorkflowNodeType {
   ESCALATE = 'ESCALATE',
   ASSIGN = 'ASSIGN',
   REASSIGN = 'REASSIGN',
+
+  // Loop/Iteration Nodes
+  FOR_EACH = 'FOR_EACH',
+  WHILE = 'WHILE',
+  SUB_WORKFLOW = 'SUB_WORKFLOW',
+
+  // Freight-Specific Nodes
+  VALIDATE_DOCUMENTS = 'VALIDATE_DOCUMENTS',
+  CALCULATE_RATES = 'CALCULATE_RATES',
+  CHECK_KYC_STATUS = 'CHECK_KYC_STATUS',
+  BOOK_CARRIER = 'BOOK_CARRIER',
+  FILE_CUSTOMS = 'FILE_CUSTOMS',
+  ASSIGN_TRANSPORTER = 'ASSIGN_TRANSPORTER',
+  COLLECT_POD = 'COLLECT_POD',
+  CREATE_QUOTATION = 'CREATE_QUOTATION',
+  CREATE_INVOICE = 'CREATE_INVOICE',
+  UPDATE_CRM = 'UPDATE_CRM',
+
+  // Integration & Data Entry Nodes (Phase 1)
+  MANUAL_DATA_ENTRY = 'MANUAL_DATA_ENTRY',
+  CRM_LOOKUP = 'CRM_LOOKUP',
+  CRM_UPDATE = 'CRM_UPDATE',
+  KYC_VERIFICATION = 'KYC_VERIFICATION',
+  DOCUMENT_UPLOAD = 'DOCUMENT_UPLOAD',
+
+  // AI & Automation Nodes (Phase 2)
+  AI_GENERATE_EMAIL = 'AI_GENERATE_EMAIL',
+  AI_SUGGEST_NEXT_STEP = 'AI_SUGGEST_NEXT_STEP',
+  SCHEMA_VALIDATION = 'SCHEMA_VALIDATION',
 }
 
 export enum WorkflowTriggerType {
@@ -55,6 +84,11 @@ export enum WorkflowTriggerType {
   CUSTOMER_TIER_CHANGE = 'CUSTOMER_TIER_CHANGE',
   SCHEDULED = 'SCHEDULED',
   WEBHOOK = 'WEBHOOK',
+  QUOTATION_ACCEPTED = 'QUOTATION_ACCEPTED',
+  QUOTATION_REJECTED = 'QUOTATION_REJECTED',
+  PAYMENT_RECEIVED = 'PAYMENT_RECEIVED',
+  MISSED_CALL = 'MISSED_CALL',
+  KYC_PENDING = 'KYC_PENDING',
 }
 
 export enum WorkflowCategory {
@@ -96,6 +130,14 @@ export type NodeConfig =
   | DelayNodeConfig
   | AINodeConfig
   | APICallNodeConfig
+  | ForEachNodeConfig
+  | WhileNodeConfig
+  | SubWorkflowNodeConfig
+  | ValidateDocumentsNodeConfig
+  | CalculateRatesNodeConfig
+  | CreateQuotationNodeConfig
+  | CreateInvoiceNodeConfig
+  | UpdateCRMNodeConfig
   | GenericNodeConfig;
 
 export interface StartNodeConfig {
@@ -264,6 +306,96 @@ export interface APICallNodeConfig {
 
 export interface GenericNodeConfig {
   [key: string]: any;
+}
+
+// ============================================================================
+// Loop & Iteration Node Configs
+// ============================================================================
+
+export interface ForEachNodeConfig {
+  type: 'FOR_EACH';
+  iterateOver: string;                    // Field path to array (e.g., 'vendor_invoices', 'documents')
+  itemVariable: string;                   // Variable name for current item (e.g., 'invoice', 'doc')
+  indexVariable?: string;                 // Variable name for index (e.g., 'index')
+  loopBody: {
+    nodes: WorkflowNode[];                // Nodes to execute for each item
+    edges: WorkflowEdge[];
+  };
+  maxIterations?: number;                 // Safety limit
+  breakCondition?: string;                // Condition to break loop early
+}
+
+export interface WhileNodeConfig {
+  type: 'WHILE';
+  condition: {
+    field: string;
+    operator: 'equals' | 'not_equals' | 'greater_than' | 'less_than' | 'contains';
+    value: any;
+  };
+  loopBody: {
+    nodes: WorkflowNode[];
+    edges: WorkflowEdge[];
+  };
+  maxIterations: number;                  // Required to prevent infinite loops
+}
+
+export interface SubWorkflowNodeConfig {
+  type: 'SUB_WORKFLOW';
+  workflowId: string;                     // ID of workflow to call
+  inputMapping?: Record<string, string>;  // Map parent context to sub-workflow context
+  outputMapping?: Record<string, string>; // Map sub-workflow output back to parent
+  waitForCompletion: boolean;             // Whether to wait for sub-workflow to complete
+}
+
+// ============================================================================
+// Freight-Specific Node Configs
+// ============================================================================
+
+export interface ValidateDocumentsNodeConfig {
+  type: 'VALIDATE_DOCUMENTS';
+  requiredDocuments: string[];            // ['BL', 'INVOICE', 'PACKING_LIST']
+  optionalDocuments?: string[];           // ['COO', 'INSURANCE']
+  autoReminder: boolean;                  // Send reminder if documents missing
+  reminderAfterHours?: number;
+  blockProgressIfMissing: boolean;        // Prevent workflow advancement
+}
+
+export interface CalculateRatesNodeConfig {
+  type: 'CALCULATE_RATES';
+  rateType: 'SEA' | 'AIR' | 'ROAD' | 'MULTIMODAL';
+  includeServices: ('freight' | 'customs' | 'delivery' | 'insurance')[];
+  applyMargin: boolean;
+  marginPercent?: number;
+  outputVariable: string;                 // Where to store calculated rates
+}
+
+export interface CreateQuotationNodeConfig {
+  type: 'CREATE_QUOTATION';
+  autoGenerateQuoteNumber: boolean;
+  emailToCustomer: boolean;
+  validityDays: number;
+  includeTermsAndConditions: boolean;
+  template?: string;                      // Email template name
+}
+
+export interface CreateInvoiceNodeConfig {
+  type: 'CREATE_INVOICE';
+  autoGenerateInvoiceNumber: boolean;
+  applyGST: boolean;
+  gstRate?: number;
+  creditDays?: number;
+  emailToCustomer: boolean;
+  sendReminder: boolean;
+  reminderAfterDays?: number;
+}
+
+export interface UpdateCRMNodeConfig {
+  type: 'UPDATE_CRM';
+  crmSystem: 'ESPOCRM' | 'SALESFORCE' | 'OTHER';
+  operation: 'CREATE' | 'UPDATE' | 'SYNC';
+  entityType: 'ACCOUNT' | 'CONTACT' | 'OPPORTUNITY' | 'CASE';
+  fieldMapping: Record<string, string>;   // Map workflow variables to CRM fields
+  syncDirection: 'TO_CRM' | 'FROM_CRM' | 'BIDIRECTIONAL';
 }
 
 // Workflow Edge
