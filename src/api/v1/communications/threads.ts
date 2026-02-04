@@ -8,6 +8,12 @@ import { logger } from '../../../utils/logger';
 import { io } from '../../../index';
 import { Permission } from '../../../utils/permissions';
 import { supabaseAdmin } from '../../../config/database.config';
+import { 
+  asyncHandler, 
+  ValidationError, 
+  NotFoundError,
+  DatabaseError 
+} from '../../../middleware/error.middleware';
 
 const router = Router();
 
@@ -48,285 +54,348 @@ const threadFiltersSchema = z.object({
 });
 
 // GET /api/v1/communications/threads - List threads
-router.get('/', requirePermission(Permission.VIEW_THREADS), async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const pagination = validateRequest(paginationSchema, req.query);
-    const filters = validateRequest(threadFiltersSchema, req.query);
+router.get('/', requirePermission(Permission.VIEW_THREADS), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const pagination = validateRequest(paginationSchema, req.query);
+  const filters = validateRequest(threadFiltersSchema, req.query);
 
-    const result = await threadRepository.findAll(filters, pagination);
+  const result = await threadRepository.findAll(filters, pagination);
 
-    const response: ApiResponse = {
-      success: true,
-      data: result.threads,
-      meta: {
-        page: result.page,
-        limit: result.limit,
-        total: result.total,
-        totalPages: result.totalPages,
-      },
-    };
-
-    res.json(response);
-  } catch (error) {
-    logger.error('Error fetching threads', { error });
-    throw error;
+  if (!result || !result.threads) {
+    throw new DatabaseError('Failed to fetch threads');
   }
-});
+
+  const response: ApiResponse = {
+    success: true,
+    data: result.threads,
+    meta: {
+      page: result.page,
+      limit: result.limit,
+      total: result.total,
+      totalPages: result.totalPages,
+    },
+  };
+
+  res.json(response);
+}));
 
 // POST /api/v1/communications/threads - Create thread
-router.post('/', requirePermission(Permission.CREATE_THREADS), async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const data = validateRequest(createThreadSchema, req.body) as CreateThreadRequest;
-    const userId = req.user!.id;
-
-    const thread = await threadRepository.create(data, userId);
-
-    // Emit WebSocket event
-    io.emit('thread:new', { thread });
-
-    const response: ApiResponse = {
-      success: true,
-      data: thread,
-    };
-
-    res.status(201).json(response);
-  } catch (error) {
-    logger.error('Error creating thread', { error });
-    throw error;
+router.post('/', requirePermission(Permission.CREATE_THREADS), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const data = validateRequest(createThreadSchema, req.body) as CreateThreadRequest;
+  
+  if (!req.user?.id) {
+    throw new ValidationError('User ID is required');
   }
-});
+  
+  const userId = req.user.id;
+
+  const thread = await threadRepository.create(data, userId);
+
+  if (!thread || !thread.id) {
+    throw new DatabaseError('Failed to create thread');
+  }
+
+  // Emit WebSocket event (only if io is available)
+  try {
+    if (io) {
+      io.emit('thread:new', { thread });
+    }
+  } catch (wsError) {
+    // Log but don't fail the request if WebSocket fails
+    logger.warn('Failed to emit WebSocket event', { 
+      event: 'thread:new', 
+      threadId: thread.id,
+      error: { message: (wsError as Error).message }
+    });
+  }
+
+  const response: ApiResponse = {
+    success: true,
+    data: thread,
+  };
+
+  res.status(201).json(response);
+}));
 
 // GET /api/v1/communications/threads/:id - Get thread
-router.get('/:id', requirePermission(Permission.VIEW_THREADS), async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const thread = await threadRepository.findById(req.params.id);
-
-    const response: ApiResponse = {
-      success: true,
-      data: thread,
-    };
-
-    res.json(response);
-  } catch (error) {
-    logger.error('Error fetching thread', { error, id: req.params.id });
-    throw error;
+router.get('/:id', requirePermission(Permission.VIEW_THREADS), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+  
+  if (!id || !id.match(/^[0-9a-fA-F-]{36}$/)) {
+    throw new ValidationError('Invalid thread ID format');
   }
-});
+
+  const thread = await threadRepository.findById(id);
+
+  if (!thread) {
+    throw new NotFoundError('Thread');
+  }
+
+  const response: ApiResponse = {
+    success: true,
+    data: thread,
+  };
+
+  res.json(response);
+}));
 
 // PATCH /api/v1/communications/threads/:id - Update thread
-router.patch('/:id', requirePermission(Permission.ASSIGN_THREADS, Permission.CLOSE_THREADS), async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const updates = validateRequest(updateThreadSchema, req.body);
-    const thread = await threadRepository.update(req.params.id, updates);
-
-    // Emit WebSocket event
-    io.emit('thread:updated', { threadId: thread.id, updates: thread });
-
-    const response: ApiResponse = {
-      success: true,
-      data: thread,
-    };
-
-    res.json(response);
-  } catch (error) {
-    logger.error('Error updating thread', { error, id: req.params.id });
-    throw error;
+router.patch('/:id', requirePermission(Permission.ASSIGN_THREADS, Permission.CLOSE_THREADS), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+  
+  if (!id || !id.match(/^[0-9a-fA-F-]{36}$/)) {
+    throw new ValidationError('Invalid thread ID format');
   }
-});
+  
+  const updates = validateRequest(updateThreadSchema, req.body);
+  
+  if (Object.keys(updates).length === 0) {
+    throw new ValidationError('No updates provided');
+  }
+
+  const thread = await threadRepository.update(id, updates);
+
+  if (!thread) {
+    throw new NotFoundError('Thread');
+  }
+
+  // Emit WebSocket event (only if io is available)
+  try {
+    if (io) {
+      io.emit('thread:updated', { threadId: thread.id, updates: thread });
+    }
+  } catch (wsError) {
+    // Log but don't fail the request if WebSocket fails
+    logger.warn('Failed to emit WebSocket event', { 
+      event: 'thread:updated', 
+      threadId: thread.id,
+      error: { message: (wsError as Error).message }
+    });
+  }
+
+  const response: ApiResponse = {
+    success: true,
+    data: thread,
+  };
+
+  res.json(response);
+}));
 
 // DELETE /api/v1/communications/threads/:id - Delete (archive) thread
-router.delete('/:id', requirePermission(Permission.DELETE_THREADS), async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    // Soft delete by archiving
-    await threadRepository.update(req.params.id, { archived: true });
-
-    const response: ApiResponse = {
-      success: true,
-      data: { message: 'Thread archived successfully' },
-    };
-
-    res.json(response);
-  } catch (error) {
-    logger.error('Error archiving thread', { error, id: req.params.id });
-    throw error;
+router.delete('/:id', requirePermission(Permission.DELETE_THREADS), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+  
+  if (!id || !id.match(/^[0-9a-fA-F-]{36}$/)) {
+    throw new ValidationError('Invalid thread ID format');
   }
-});
+
+  // Soft delete by archiving
+  const thread = await threadRepository.update(id, { archived: true });
+
+  if (!thread) {
+    throw new NotFoundError('Thread');
+  }
+
+  const response: ApiResponse = {
+    success: true,
+    data: { message: 'Thread archived successfully' },
+  };
+
+  res.json(response);
+}));
 
 // POST /api/v1/communications/threads/:id/follow - Follow thread
-router.post('/:id/follow', requirePermission(Permission.VIEW_THREADS), async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const userId = req.user!.id;
-    await threadRepository.addFollower(req.params.id, userId);
-
-    const response: ApiResponse = {
-      success: true,
-      data: { message: 'Thread followed successfully' },
-    };
-
-    res.json(response);
-  } catch (error) {
-    logger.error('Error following thread', { error, id: req.params.id });
-    throw error;
+router.post('/:id/follow', requirePermission(Permission.VIEW_THREADS), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+  
+  if (!id || !id.match(/^[0-9a-fA-F-]{36}$/)) {
+    throw new ValidationError('Invalid thread ID format');
   }
-});
+  
+  if (!req.user?.id) {
+    throw new ValidationError('User ID is required');
+  }
+  
+  const userId = req.user.id;
+  await threadRepository.addFollower(id, userId);
+
+  const response: ApiResponse = {
+    success: true,
+    data: { message: 'Thread followed successfully' },
+  };
+
+  res.json(response);
+}));
 
 // POST /api/v1/communications/threads/:id/unfollow - Unfollow thread
-router.post('/:id/unfollow', requirePermission(Permission.VIEW_THREADS), async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const userId = req.user!.id;
-    await threadRepository.removeFollower(req.params.id, userId);
-
-    const response: ApiResponse = {
-      success: true,
-      data: { message: 'Thread unfollowed successfully' },
-    };
-
-    res.json(response);
-  } catch (error) {
-    logger.error('Error unfollowing thread', { error, id: req.params.id });
-    throw error;
+router.post('/:id/unfollow', requirePermission(Permission.VIEW_THREADS), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+  
+  if (!id || !id.match(/^[0-9a-fA-F-]{36}$/)) {
+    throw new ValidationError('Invalid thread ID format');
   }
-});
+  
+  if (!req.user?.id) {
+    throw new ValidationError('User ID is required');
+  }
+  
+  const userId = req.user.id;
+  await threadRepository.removeFollower(id, userId);
+
+  const response: ApiResponse = {
+    success: true,
+    data: { message: 'Thread unfollowed successfully' },
+  };
+
+  res.json(response);
+}));
 
 // POST /api/v1/communications/threads/:id/messages - Send message to thread
-router.post('/:id/messages', requirePermission(Permission.SEND_MESSAGES), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.post('/:id/messages', requirePermission(Permission.SEND_MESSAGES), asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const threadId = req.params.id;
+  const { content, sender_type, channel } = req.body;
+
+  // Validate thread ID
+  if (!threadId || !threadId.match(/^[0-9a-fA-F-]{36}$/)) {
+    throw new ValidationError('Invalid thread ID format');
+  }
+
+  // Validate required fields
+  if (!content || !sender_type || !channel) {
+    throw new ValidationError('content, sender_type, and channel are required');
+  }
+
+  if (!req.user?.id || !req.user?.email) {
+    throw new ValidationError('User authentication data is missing');
+  }
+
+  // Verify thread exists
+  const thread = await threadRepository.findById(threadId);
+  if (!thread) {
+    throw new NotFoundError('Thread');
+  }
+
+  // Create message
+  const { data: message, error } = await supabaseAdmin
+    .from('communication_messages')
+    .insert({
+      thread_id: threadId,
+      channel: channel,
+      direction: 'OUTBOUND',
+      content: content,
+      sender_type: sender_type,
+      sender_id: req.user.id,
+      from_address: req.user.email,
+      to_addresses: [],
+      status: 'SENT',
+      sent_at: new Date().toISOString(),
+      sent_by: req.user.id,
+    })
+    .select()
+    .single();
+
+  if (error || !message) {
+    logger.error('Failed to create message', { 
+      threadId,
+      error: { message: error?.message, code: error?.code }
+    });
+    throw new DatabaseError('Failed to create message');
+  }
+
+  // Update thread timestamps
   try {
-    const threadId = req.params.id;
-    const { content, sender_type, channel } = req.body;
-
-    if (!content || !sender_type || !channel) {
-      res.status(400).json({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'content, sender_type, and channel are required',
-        },
-      });
-      return;
-    }
-
-    // Verify thread exists
-    const thread = await threadRepository.findById(threadId);
-
-    // Create message
-    const { data: message, error } = await supabaseAdmin
-      .from('communication_messages')
-      .insert({
-        thread_id: threadId,
-        channel: channel,
-        direction: 'OUTBOUND',
-        content: content,
-        sender_type: sender_type,
-        sender_id: req.user!.id,
-        from_address: req.user!.email || '',
-        to_addresses: [],
-        status: 'SENT',
-        sent_at: new Date().toISOString(),
-        sent_by: req.user!.id,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      logger.error('Error creating message', { error: error.message, threadId });
-      throw error;
-    }
-
-    // Update thread timestamps
     await threadRepository.update(threadId, {
       last_activity_at: new Date().toISOString(),
       last_message_at: new Date().toISOString(),
     } as any);
-
-    // Emit WebSocket event
-    io.to(`thread:${threadId}`).emit('thread:message', {
+  } catch (updateError) {
+    // Log but don't fail the request if timestamp update fails
+    logger.warn('Failed to update thread timestamps', { 
       threadId,
-      message,
+      error: { message: (updateError as Error).message }
     });
-
-    logger.info('Message sent successfully', {
-      messageId: message.id,
-      threadId,
-      channel,
-    });
-
-    const response: ApiResponse = {
-      success: true,
-      data: message,
-    };
-
-    res.json(response);
-  } catch (error) {
-    logger.error('Error sending message', { error, id: req.params.id });
-    throw error;
   }
-});
+
+  // Emit WebSocket event (only if io is available)
+  try {
+    if (io) {
+      io.to(`thread:${threadId}`).emit('thread:message', {
+        threadId,
+        message,
+      });
+    }
+  } catch (wsError) {
+    // Log but don't fail the request if WebSocket fails
+    logger.warn('Failed to emit WebSocket event', { 
+      event: 'thread:message', 
+      threadId,
+      error: { message: (wsError as Error).message }
+    });
+  }
+
+  logger.info('Message sent successfully', {
+    messageId: message.id,
+    threadId,
+    channel,
+  });
+
+  const response: ApiResponse = {
+    success: true,
+    data: message,
+  };
+
+  res.json(response);
+}));
 
 // POST /api/v1/communications/threads/:id/link-shipment - Link shipment
-router.post('/:id/link-shipment', requirePermission(Permission.ASSIGN_THREADS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { shipment_id } = req.body;
+router.post('/:id/link-shipment', requirePermission(Permission.ASSIGN_THREADS), asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { shipment_id } = req.body;
 
-    if (!shipment_id) {
-      res.status(400).json({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'shipment_id is required',
-        },
-      });
-      return;
-    }
-
-    await threadRepository.linkShipment(req.params.id, shipment_id);
-
-    const response: ApiResponse = {
-      success: true,
-      data: { message: 'Shipment linked successfully' },
-    };
-
-    res.json(response);
-  } catch (error) {
-    logger.error('Error linking shipment', { error, id: req.params.id });
-    throw error;
+  if (!id || !id.match(/^[0-9a-fA-F-]{36}$/)) {
+    throw new ValidationError('Invalid thread ID format');
   }
-});
+
+  if (!shipment_id || !shipment_id.match(/^[0-9a-fA-F-]{36}$/)) {
+    throw new ValidationError('Invalid shipment ID format');
+  }
+
+  await threadRepository.linkShipment(id, shipment_id);
+
+  const response: ApiResponse = {
+    success: true,
+    data: { message: 'Shipment linked successfully' },
+  };
+
+  res.json(response);
+}));
 
 // GET /api/v1/communications/threads/search - Search threads
-router.get('/search', requirePermission(Permission.VIEW_THREADS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  try {
-    const { q } = req.query;
+router.get('/search', requirePermission(Permission.VIEW_THREADS), asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const { q } = req.query;
 
-    if (!q || typeof q !== 'string') {
-      res.status(400).json({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Search query (q) is required',
-        },
-      });
-      return;
-    }
-
-    const pagination = validateRequest(paginationSchema, req.query);
-    const result = await threadRepository.findAll({ search: q }, pagination);
-
-    const response: ApiResponse = {
-      success: true,
-      data: result.threads,
-      meta: {
-        page: result.page,
-        limit: result.limit,
-        total: result.total,
-        totalPages: result.totalPages,
-      },
-    };
-
-    res.json(response);
-  } catch (error) {
-    logger.error('Error searching threads', { error });
-    throw error;
+  if (!q || typeof q !== 'string' || q.trim().length === 0) {
+    throw new ValidationError('Search query (q) is required and must be a non-empty string');
   }
-});
+
+  const pagination = validateRequest(paginationSchema, req.query);
+  const result = await threadRepository.findAll({ search: q.trim() }, pagination);
+
+  if (!result || !result.threads) {
+    throw new DatabaseError('Failed to search threads');
+  }
+
+  const response: ApiResponse = {
+    success: true,
+    data: result.threads,
+    meta: {
+      page: result.page,
+      limit: result.limit,
+      total: result.total,
+      totalPages: result.totalPages,
+    },
+  };
+
+  res.json(response);
+}));
 
 export default router;

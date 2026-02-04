@@ -5,148 +5,201 @@ import {
   UpdateThreadRequest,
   ThreadFilters,
   PaginationParams,
-  NotFoundError,
 } from '../../types';
 import { generateReference } from '../../utils/helpers';
 import { logger } from '../../utils/logger';
+import { 
+  NotFoundError as ErrorNotFound,
+  DatabaseError 
+} from '../../middleware/error.middleware';
+
+// Keep the NotFoundError from types for backward compatibility
+import { NotFoundError } from '../../types';
 
 export class ThreadRepository {
   async findAll(filters: ThreadFilters = {}, pagination: PaginationParams = {}) {
-    const {
-      status,
-      priority,
-      channel,
-      assigned_to,
-      customer_id,
-      shipment_id,
-      tags,
-      search,
-      starred,
-      archived,
-      dateFrom,
-      dateTo,
-    } = filters;
+    try {
+      const {
+        status,
+        priority,
+        channel,
+        assigned_to,
+        customer_id,
+        shipment_id,
+        tags,
+        search,
+        starred,
+        archived,
+        dateFrom,
+        dateTo,
+      } = filters;
 
-    const { page = 1, limit = 20, sortBy = 'created_at', sortOrder = 'desc' } = pagination;
+      const { page = 1, limit = 20, sortBy = 'created_at', sortOrder = 'desc' } = pagination;
 
-    let query = supabaseAdmin
-      .from('communication_threads')
-      .select(`
-        *,
-        customers (
-          id,
-          name,
-          email,
-          phone,
-          company
-        ),
-        users!communication_threads_assigned_to_fkey (
-          id,
-          full_name,
-          email
-        )
-      `, { count: 'exact' });
+      // Validate pagination parameters
+      if (page < 1 || limit < 1 || limit > 100) {
+        throw new DatabaseError('Invalid pagination parameters');
+      }
 
-    // Apply filters
-    if (status && status.length > 0) {
-      query = query.in('status', status);
+      let query = supabaseAdmin
+        .from('communication_threads')
+        .select(`
+          *,
+          customers (
+            id,
+            name,
+            email,
+            phone,
+            company
+          ),
+          users!communication_threads_assigned_to_fkey (
+            id,
+            full_name,
+            email
+          )
+        `, { count: 'exact' });
+
+      // Apply filters
+      if (status && status.length > 0) {
+        query = query.in('status', status);
+      }
+
+      if (priority && priority.length > 0) {
+        query = query.in('priority', priority);
+      }
+
+      if (channel && channel.length > 0) {
+        query = query.contains('channels', channel);
+      }
+
+      if (assigned_to) {
+        query = query.eq('assigned_to', assigned_to);
+      }
+
+      if (customer_id) {
+        query = query.eq('customer_id', customer_id);
+      }
+
+      if (shipment_id) {
+        query = query.eq('shipment_id', shipment_id);
+      }
+
+      if (tags && tags.length > 0) {
+        query = query.overlaps('tags', tags);
+      }
+
+      if (starred !== undefined) {
+        query = query.eq('starred', starred);
+      }
+
+      if (archived !== undefined) {
+        query = query.eq('archived', archived);
+      } else {
+        // Default: exclude archived
+        query = query.eq('archived', false);
+      }
+
+      if (dateFrom) {
+        query = query.gte('created_at', dateFrom.toISOString());
+      }
+
+      if (dateTo) {
+        query = query.lte('created_at', dateTo.toISOString());
+      }
+
+      if (search) {
+        // Sanitize search input
+        const sanitizedSearch = search.replace(/[%_]/g, '\\$&');
+        query = query.or(`reference.ilike.%${sanitizedSearch}%,type.ilike.%${sanitizedSearch}%`);
+      }
+
+      // Pagination and sorting
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+
+      query = query.order(sortBy, { ascending: sortOrder === 'asc' }).range(from, to);
+
+      const { data, error, count } = await query;
+
+      if (error) {
+        logger.error('Database error fetching threads', { 
+          error: { message: error.message, code: error.code }
+        });
+        throw new DatabaseError('Failed to fetch threads');
+      }
+
+      return {
+        threads: data as CommunicationThread[],
+        total: count || 0,
+        page,
+        limit,
+        totalPages: Math.ceil((count || 0) / limit),
+      };
+    } catch (error) {
+      if (error instanceof DatabaseError) {
+        throw error;
+      }
+      logger.error('Unexpected error in findAll', { 
+        error: { message: (error as Error).message }
+      });
+      throw new DatabaseError('Failed to fetch threads');
     }
-
-    if (priority && priority.length > 0) {
-      query = query.in('priority', priority);
-    }
-
-    if (channel && channel.length > 0) {
-      query = query.contains('channels', channel);
-    }
-
-    if (assigned_to) {
-      query = query.eq('assigned_to', assigned_to);
-    }
-
-    if (customer_id) {
-      query = query.eq('customer_id', customer_id);
-    }
-
-    if (shipment_id) {
-      query = query.eq('shipment_id', shipment_id);
-    }
-
-    if (tags && tags.length > 0) {
-      query = query.overlaps('tags', tags);
-    }
-
-    if (starred !== undefined) {
-      query = query.eq('starred', starred);
-    }
-
-    if (archived !== undefined) {
-      query = query.eq('archived', archived);
-    } else {
-      // Default: exclude archived
-      query = query.eq('archived', false);
-    }
-
-    if (dateFrom) {
-      query = query.gte('created_at', dateFrom.toISOString());
-    }
-
-    if (dateTo) {
-      query = query.lte('created_at', dateTo.toISOString());
-    }
-
-    if (search) {
-      query = query.or(`reference.ilike.%${search}%,type.ilike.%${search}%`);
-    }
-
-    // Pagination and sorting
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
-
-    query = query.order(sortBy, { ascending: sortOrder === 'asc' }).range(from, to);
-
-    const { data, error, count } = await query;
-
-    if (error) {
-      logger.error('Error fetching threads', { error: error.message });
-      throw error;
-    }
-
-    return {
-      threads: data as CommunicationThread[],
-      total: count || 0,
-      page,
-      limit,
-      totalPages: Math.ceil((count || 0) / limit),
-    };
   }
 
   async findById(id: string): Promise<CommunicationThread> {
-    const { data, error } = await supabaseAdmin
-      .from('communication_threads')
-      .select(`
-        *,
-        customers (
-          id,
-          name,
-          email,
-          phone,
-          company
-        ),
-        users!communication_threads_assigned_to_fkey (
-          id,
-          full_name,
-          email
-        )
-      `)
-      .eq('id', id)
-      .single();
+    try {
+      // Validate UUID format
+      if (!id || !id.match(/^[0-9a-fA-F-]{36}$/)) {
+        throw new ErrorNotFound('Thread');
+      }
 
-    if (error || !data) {
-      throw new NotFoundError('Thread');
+      const { data, error } = await supabaseAdmin
+        .from('communication_threads')
+        .select(`
+          *,
+          customers (
+            id,
+            name,
+            email,
+            phone,
+            company
+          ),
+          users!communication_threads_assigned_to_fkey (
+            id,
+            full_name,
+            email
+          )
+        `)
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // Not found error from PostgREST
+          throw new ErrorNotFound('Thread');
+        }
+        logger.error('Database error fetching thread', { 
+          threadId: id,
+          error: { message: error.message, code: error.code }
+        });
+        throw new DatabaseError('Failed to fetch thread');
+      }
+
+      if (!data) {
+        throw new ErrorNotFound('Thread');
+      }
+
+      return data as CommunicationThread;
+    } catch (error) {
+      if (error instanceof ErrorNotFound || error instanceof DatabaseError) {
+        throw error;
+      }
+      logger.error('Unexpected error in findById', { 
+        threadId: id,
+        error: { message: (error as Error).message }
+      });
+      throw new DatabaseError('Failed to fetch thread');
     }
-
-    return data as CommunicationThread;
   }
 
   async findByReference(reference: string): Promise<CommunicationThread | null> {
@@ -164,81 +217,200 @@ export class ThreadRepository {
   }
 
   async create(threadData: CreateThreadRequest, userId: string): Promise<CommunicationThread> {
-    const reference = generateReference('BX');
+    try {
+      // Validate required fields
+      if (!threadData.customer_id || !threadData.primary_channel) {
+        throw new DatabaseError('Missing required fields for thread creation');
+      }
 
-    const newThread = {
-      reference,
-      type: threadData.type,
-      priority: threadData.priority || 'MEDIUM',
-      customer_id: threadData.customer_id,
-      primary_contact_id: threadData.primary_contact_id,
-      primary_channel: threadData.primary_channel,
-      channels: [threadData.primary_channel],
-      shipment_id: threadData.shipment_id,
-      tags: threadData.tags || [],
-      // assigned_to: userId, // Temporarily disabled for development until user is created
-      assigned_to: null, // Set to null for development
-      tat_started_at: new Date().toISOString(),
-    };
+      const reference = generateReference('BX');
 
-    const { data, error } = await supabaseAdmin
-      .from('communication_threads')
-      .insert(newThread)
-      .select()
-      .single();
+      const newThread = {
+        reference,
+        type: threadData.type,
+        priority: threadData.priority || 'MEDIUM',
+        customer_id: threadData.customer_id,
+        primary_contact_id: threadData.primary_contact_id,
+        primary_channel: threadData.primary_channel,
+        channels: [threadData.primary_channel],
+        shipment_id: threadData.shipment_id,
+        tags: threadData.tags || [],
+        // assigned_to: userId, // Temporarily disabled for development until user is created
+        assigned_to: null, // Set to null for development
+        tat_started_at: new Date().toISOString(),
+      };
 
-    if (error) {
-      logger.error('Error creating thread', { error: error.message });
-      throw error;
+      const { data, error } = await supabaseAdmin
+        .from('communication_threads')
+        .insert(newThread)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Database error creating thread', { 
+          error: { message: error.message, code: error.code }
+        });
+        throw new DatabaseError('Failed to create thread');
+      }
+
+      if (!data) {
+        throw new DatabaseError('Failed to create thread - no data returned');
+      }
+
+      return data as CommunicationThread;
+    } catch (error) {
+      if (error instanceof DatabaseError) {
+        throw error;
+      }
+      logger.error('Unexpected error in create', { 
+        error: { message: (error as Error).message }
+      });
+      throw new DatabaseError('Failed to create thread');
     }
-
-    return data as CommunicationThread;
   }
 
   async update(id: string, updates: UpdateThreadRequest): Promise<CommunicationThread> {
-    const { data, error } = await supabaseAdmin
-      .from('communication_threads')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
+    try {
+      // Validate UUID format
+      if (!id || !id.match(/^[0-9a-fA-F-]{36}$/)) {
+        throw new ErrorNotFound('Thread');
+      }
 
-    if (error) {
-      logger.error('Error updating thread', { id, error: error.message });
-      throw error;
+      // Validate updates object
+      if (!updates || Object.keys(updates).length === 0) {
+        throw new DatabaseError('No updates provided');
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('communication_threads')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // Not found error from PostgREST
+          throw new ErrorNotFound('Thread');
+        }
+        logger.error('Database error updating thread', { 
+          threadId: id,
+          error: { message: error.message, code: error.code }
+        });
+        throw new DatabaseError('Failed to update thread');
+      }
+
+      if (!data) {
+        throw new ErrorNotFound('Thread');
+      }
+
+      return data as CommunicationThread;
+    } catch (error) {
+      if (error instanceof ErrorNotFound || error instanceof DatabaseError) {
+        throw error;
+      }
+      logger.error('Unexpected error in update', { 
+        threadId: id,
+        error: { message: (error as Error).message }
+      });
+      throw new DatabaseError('Failed to update thread');
     }
-
-    return data as CommunicationThread;
   }
 
   async delete(id: string): Promise<void> {
-    const { error } = await supabaseAdmin
-      .from('communication_threads')
-      .delete()
-      .eq('id', id);
+    try {
+      // Validate UUID format
+      if (!id || !id.match(/^[0-9a-fA-F-]{36}$/)) {
+        throw new ErrorNotFound('Thread');
+      }
 
-    if (error) {
-      logger.error('Error deleting thread', { id, error: error.message });
-      throw error;
+      const { error } = await supabaseAdmin
+        .from('communication_threads')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          throw new ErrorNotFound('Thread');
+        }
+        logger.error('Database error deleting thread', { 
+          threadId: id,
+          error: { message: error.message, code: error.code }
+        });
+        throw new DatabaseError('Failed to delete thread');
+      }
+    } catch (error) {
+      if (error instanceof ErrorNotFound || error instanceof DatabaseError) {
+        throw error;
+      }
+      logger.error('Unexpected error in delete', { 
+        threadId: id,
+        error: { message: (error as Error).message }
+      });
+      throw new DatabaseError('Failed to delete thread');
     }
   }
 
   async addFollower(threadId: string, userId: string): Promise<void> {
-    const thread = await this.findById(threadId);
-    const followers = [...(thread.followers || []), userId];
+    try {
+      const thread = await this.findById(threadId);
+      const followers = [...(thread.followers || []), userId];
 
-    await this.update(threadId, { followers });
+      // Avoid duplicates
+      const uniqueFollowers = Array.from(new Set(followers));
+      
+      await this.update(threadId, { followers: uniqueFollowers });
+    } catch (error) {
+      if (error instanceof ErrorNotFound || error instanceof DatabaseError) {
+        throw error;
+      }
+      logger.error('Unexpected error in addFollower', { 
+        threadId,
+        userId,
+        error: { message: (error as Error).message }
+      });
+      throw new DatabaseError('Failed to add follower');
+    }
   }
 
   async removeFollower(threadId: string, userId: string): Promise<void> {
-    const thread = await this.findById(threadId);
-    const followers = (thread.followers || []).filter(id => id !== userId);
+    try {
+      const thread = await this.findById(threadId);
+      const followers = (thread.followers || []).filter(id => id !== userId);
 
-    await this.update(threadId, { followers });
+      await this.update(threadId, { followers });
+    } catch (error) {
+      if (error instanceof ErrorNotFound || error instanceof DatabaseError) {
+        throw error;
+      }
+      logger.error('Unexpected error in removeFollower', { 
+        threadId,
+        userId,
+        error: { message: (error as Error).message }
+      });
+      throw new DatabaseError('Failed to remove follower');
+    }
   }
 
   async linkShipment(threadId: string, shipmentId: string): Promise<void> {
-    await this.update(threadId, { shipment_id: shipmentId });
+    try {
+      // Validate shipment ID format
+      if (!shipmentId || !shipmentId.match(/^[0-9a-fA-F-]{36}$/)) {
+        throw new DatabaseError('Invalid shipment ID format');
+      }
+
+      await this.update(threadId, { shipment_id: shipmentId });
+    } catch (error) {
+      if (error instanceof ErrorNotFound || error instanceof DatabaseError) {
+        throw error;
+      }
+      logger.error('Unexpected error in linkShipment', { 
+        threadId,
+        shipmentId,
+        error: { message: (error as Error).message }
+      });
+      throw new DatabaseError('Failed to link shipment');
+    }
   }
 }
 
