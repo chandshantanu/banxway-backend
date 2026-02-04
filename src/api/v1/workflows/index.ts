@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticateRequest } from '../../../middleware/auth.middleware';
 import builderRouter from './builder';
+import manualEntriesRouter from './manual-entries';
 
 const router = Router();
 
@@ -9,6 +10,9 @@ router.use(authenticateRequest);
 
 // Mount workflow builder routes
 router.use('/builder', builderRouter);
+
+// Mount manual entries routes
+router.use('/', manualEntriesRouter);
 
 // For backward compatibility, proxy some routes to builder
 // router.get('/definitions', (req, res, next) => {
