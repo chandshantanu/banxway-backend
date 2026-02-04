@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabase } from '../config/database.config';
+import { supabase, supabaseAdmin } from '../config/database.config';
 import { UnauthorizedError, ForbiddenError } from '../types';
 import { logger } from '../utils/logger';
 import { Permission, hasPermission, UserRole } from '../utils/permissions';
@@ -47,8 +47,8 @@ export async function authenticateRequest(
       tokenLength: token.length,
     });
 
-    // Verify token with Supabase
-    const { data: { user }, error } = await supabase.auth.getUser(token);
+    // Verify token with Supabase using admin client (can validate RS256 tokens)
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
 
     if (error || !user) {
       logger.warn('Supabase token validation failed', {
