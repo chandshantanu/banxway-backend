@@ -1,5 +1,16 @@
 // Workflow Builder Types for Logistics Operations
 
+import type {
+  ManualDataEntryNodeConfig,
+  CRMLookupNodeConfig,
+  CRMUpdateNodeConfig,
+  KYCVerificationNodeConfig,
+  DocumentUploadNodeConfig,
+  AIGenerateEmailNodeConfig,
+  AISuggestNextStepNodeConfig,
+  SchemaValidationNodeConfig,
+} from './workflow-integration-nodes';
+
 export enum WorkflowNodeType {
   // Core Nodes
   START = 'START',
@@ -138,6 +149,14 @@ export type NodeConfig =
   | CreateQuotationNodeConfig
   | CreateInvoiceNodeConfig
   | UpdateCRMNodeConfig
+  | ManualDataEntryNodeConfig
+  | CRMLookupNodeConfig
+  | CRMUpdateNodeConfig
+  | KYCVerificationNodeConfig
+  | DocumentUploadNodeConfig
+  | AIGenerateEmailNodeConfig
+  | AISuggestNextStepNodeConfig
+  | SchemaValidationNodeConfig
   | GenericNodeConfig;
 
 export interface StartNodeConfig {
