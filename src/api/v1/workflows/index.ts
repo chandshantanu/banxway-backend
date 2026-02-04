@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticateRequest } from '../../../middleware/auth.middleware';
 import builderRouter from './builder';
 import manualEntriesRouter from './manual-entries';
+import aiSuggestionsRouter from './ai-suggestions';
 
 const router = Router();
 
@@ -13,6 +14,9 @@ router.use('/builder', builderRouter);
 
 // Mount manual entries routes
 router.use('/', manualEntriesRouter);
+
+// Mount AI suggestions routes
+router.use('/ai-suggestions', aiSuggestionsRouter);
 
 // For backward compatibility, proxy some routes to builder
 // router.get('/definitions', (req, res, next) => {
