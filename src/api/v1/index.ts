@@ -20,10 +20,12 @@ import excelImportRouter from './excel-import';
 import shippersRouter from './shippers';
 import rateCardsRouter from './rate-cards';
 import shipperQuoteRequestsRouter from './shipper-quote-requests';
+import inboxRouter from './inbox';
 
 const router = Router();
 
 // Mount route handlers
+router.use('/inbox', inboxRouter);
 router.use('/communications', communicationsRouter);
 router.use('/shipments', shipmentsRouter);
 router.use('/workflows', workflowsRouter);

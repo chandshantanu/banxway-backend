@@ -4,6 +4,7 @@ import threadsRouter from './threads';
 import messagesRouter from './messages';
 import actionsRouter from './actions';
 import notesRouter from './notes';
+import statsRouter from './stats';
 
 const router = Router();
 
@@ -12,6 +13,7 @@ const router = Router();
 router.use(conditionalAuth);
 
 // Mount sub-routers
+router.use('/stats', statsRouter);
 router.use('/threads', threadsRouter);
 router.use('/messages', messagesRouter);
 router.use('/actions', actionsRouter);
