@@ -9,7 +9,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 /**
  * Clean error formatter - removes stack traces and sensitive data
  */
-const cleanErrorFormat = winston.format((info) => {
+const cleanErrorFormat = winston.format((info: any) => {
   // Remove stack traces completely
   if (info.stack) {
     delete info.stack;
