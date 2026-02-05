@@ -2,7 +2,7 @@ import rateLimit from 'express-rate-limit';
 import { ApiResponse } from '../types';
 
 const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'); // 15 minutes
-const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100');
+const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '1000'); // Increased for production
 
 export const rateLimiter = rateLimit({
   windowMs,
@@ -37,10 +37,10 @@ export const authRateLimiter = rateLimit({
 // Polling rate limiter for presence/notification endpoints
 // These endpoints are polled frequently by frontend and need higher limits
 // Calculation: ~67.5 requests per user per 15 min (notifications:30, online:30, heartbeat:7.5)
-// Setting to 300 allows for ~4 concurrent users or multiple browser tabs
+// Setting to 2000 allows for ~30 concurrent users or many browser tabs
 export const pollingRateLimiter = rateLimit({
   windowMs: windowMs, // Use same window as global (15 minutes)
-  max: parseInt(process.env.POLLING_RATE_LIMIT_MAX || '300'),
+  max: parseInt(process.env.POLLING_RATE_LIMIT_MAX || '2000'), // Increased for production
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
