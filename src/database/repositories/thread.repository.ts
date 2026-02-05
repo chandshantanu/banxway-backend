@@ -17,6 +17,18 @@ import {
 import { NotFoundError } from '../../types';
 
 export class ThreadRepository {
+  /**
+   * Check if error is due to missing table
+   */
+  private isTableMissingError(error: any): boolean {
+    return (
+      error.code === '42P01' || // PostgreSQL: undefined_table
+      error.message?.includes('communication_threads') && error.message?.includes('not found') ||
+      error.message?.includes('schema cache') ||
+      error.message?.includes('relation') && error.message?.includes('does not exist')
+    );
+  }
+
   async findAll(filters: ThreadFilters = {}, pagination: PaginationParams = {}) {
     try {
       const {
@@ -122,6 +134,20 @@ export class ThreadRepository {
       const { data, error, count } = await query;
 
       if (error) {
+        // CRITICAL: Return empty data if table doesn't exist (graceful degradation)
+        if (this.isTableMissingError(error)) {
+          logger.debug('Communication threads table not found - returning empty array', {
+            error: { code: error.code, message: error.message }
+          });
+          return {
+            threads: [],
+            total: 0,
+            page,
+            limit,
+            totalPages: 0,
+          };
+        }
+
         logger.error('Database error fetching threads', {
           error: { message: error.message, code: error.code }
         });
@@ -139,6 +165,19 @@ export class ThreadRepository {
       if (error instanceof DatabaseError) {
         throw error;
       }
+
+      // Check for table missing error in catch block too
+      if (this.isTableMissingError(error)) {
+        logger.debug('Communication threads table not found - returning empty array');
+        return {
+          threads: [],
+          total: 0,
+          page,
+          limit,
+          totalPages: 0,
+        };
+      }
+
       logger.error('Unexpected error in findAll', {
         error: { message: (error as Error).message }
       });
@@ -178,6 +217,15 @@ export class ThreadRepository {
           // Not found error from PostgREST
           throw new ErrorNotFound('Thread');
         }
+
+        // CRITICAL: Return null if table doesn't exist (graceful degradation)
+        if (this.isTableMissingError(error)) {
+          logger.debug('Communication threads table not found - returning null', {
+            threadId: id
+          });
+          throw new ErrorNotFound('Thread');
+        }
+
         logger.error('Database error fetching thread', {
           threadId: id,
           error: { message: error.message, code: error.code }
@@ -194,6 +242,13 @@ export class ThreadRepository {
       if (error instanceof ErrorNotFound || error instanceof DatabaseError) {
         throw error;
       }
+
+      // Check for table missing error in catch block
+      if (this.isTableMissingError(error)) {
+        logger.debug('Communication threads table not found - returning null');
+        throw new ErrorNotFound('Thread');
+      }
+
       logger.error('Unexpected error in findById', {
         threadId: id,
         error: { message: (error as Error).message }
