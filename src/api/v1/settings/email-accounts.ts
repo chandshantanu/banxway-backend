@@ -128,6 +128,55 @@ router.post('/detect-provider', async (req: Request, res: Response): Promise<voi
 });
 
 /**
+ * POST /api/v1/settings/email-accounts/poll-now
+ * Manually trigger email polling for all accounts (or specific account)
+ *
+ * Query params:
+ * - accountId: (optional) Poll specific account only
+ */
+router.post('/poll-now', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const accountId = req.query.accountId as string | undefined;
+    const emailQueue = getEmailQueue();
+
+    if (accountId) {
+      // Poll specific account
+      await emailQueue.add('POLL_INBOX', {
+        action: 'POLL_INBOX',
+        data: { accountId },
+      });
+
+      logger.info('Manual email poll triggered for account', { accountId });
+
+      res.json({
+        success: true,
+        message: 'Email polling started for specified account',
+        data: { accountId },
+      });
+    } else {
+      // Poll all accounts
+      await emailQueue.add('POLL_ALL_INBOXES', {
+        action: 'POLL_ALL_INBOXES',
+      });
+
+      logger.info('Manual email poll triggered for all accounts');
+
+      res.json({
+        success: true,
+        message: 'Email polling started for all accounts',
+      });
+    }
+  } catch (error: any) {
+    logger.error('Error triggering manual email poll', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to trigger email polling',
+      message: error.message,
+    });
+  }
+});
+
+/**
  * GET /api/v1/settings/email-accounts/:id
  * Get a specific email account
  */
@@ -430,55 +479,6 @@ router.post('/:id/toggle-polling', async (req: Request, res: Response): Promise<
     res.status(500).json({
       success: false,
       error: 'Failed to toggle polling',
-      message: error.message,
-    });
-  }
-});
-
-/**
- * POST /api/v1/settings/email-accounts/poll-now
- * Manually trigger email polling for all accounts (or specific account)
- *
- * Query params:
- * - accountId: (optional) Poll specific account only
- */
-router.post('/poll-now', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const accountId = req.query.accountId as string | undefined;
-    const emailQueue = getEmailQueue();
-
-    if (accountId) {
-      // Poll specific account
-      await emailQueue.add('POLL_INBOX', {
-        action: 'POLL_INBOX',
-        data: { accountId },
-      });
-
-      logger.info('Manual email poll triggered for account', { accountId });
-
-      res.json({
-        success: true,
-        message: 'Email polling started for specified account',
-        data: { accountId },
-      });
-    } else {
-      // Poll all accounts
-      await emailQueue.add('POLL_ALL_INBOXES', {
-        action: 'POLL_ALL_INBOXES',
-      });
-
-      logger.info('Manual email poll triggered for all accounts');
-
-      res.json({
-        success: true,
-        message: 'Email polling started for all accounts',
-      });
-    }
-  } catch (error: any) {
-    logger.error('Error triggering manual email poll', { error: error.message });
-    res.status(500).json({
-      success: false,
-      error: 'Failed to trigger email polling',
       message: error.message,
     });
   }
