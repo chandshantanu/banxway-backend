@@ -22,7 +22,8 @@
     "worker:transcription": "node dist/workers/transcription.worker.js",
     "worker:transcription:dev": "ts-node src/workers/transcription.worker.ts",
     "workers:all": "concurrently \"npm run worker:email-poller\" \"npm run worker:whatsapp\" \"npm run worker:transcription\"",
-    "workers:all:dev": "concurrently \"npm run worker:email-poller:dev\" \"npm run worker:whatsapp:dev\" \"npm run worker:transcription:dev\""
+    "workers:all:dev": "concurrently \"npm run worker:email-poller:dev\" \"npm run worker:whatsapp:dev\" \"npm run worker:transcription:dev\"",
+    "seed:workflows": "ts-node src/scripts/seed-workflows.ts"
   },
   "keywords": [
     "freight",

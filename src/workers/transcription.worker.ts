@@ -3,17 +3,11 @@ import { logger } from '../utils/logger';
 import transcriptionService from '../services/transcription/transcription.service';
 import { supabaseAdmin } from '../config/database.config';
 import { io } from '../index';
+import { getRedisConnection } from '../config/redis.config';
 
-// Redis connection for BullMQ
-const connection = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-};
-
-// Create transcription queue
+// Create transcription queue using shared Redis connection
 export const transcriptionQueue = new Queue('transcription', {
-  connection,
+  connection: getRedisConnection(),
   defaultJobOptions: {
     attempts: 3,
     backoff: {
@@ -130,7 +124,7 @@ async function processTranscriptionJob(job: Job<TranscriptionJobData>): Promise<
  */
 export function createTranscriptionWorker(): Worker<TranscriptionJobData> {
   const worker = new Worker('transcription', processTranscriptionJob, {
-    connection,
+    connection: getRedisConnection(),
     concurrency: 5, // Process up to 5 transcriptions concurrently
   });
 

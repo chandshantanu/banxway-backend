@@ -90,9 +90,14 @@ app.use(errorHandler);
 // WEBSOCKET SETUP
 // =====================================================
 
+// Parse CORS_ORIGIN (can be comma-separated list)
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+  : ['http://localhost:3003', 'http://localhost:3000'];
+
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3003',
+    origin: corsOrigins,
     credentials: true,
   },
   transports: ['websocket', 'polling'],

@@ -25,13 +25,7 @@ import crmCustomerRepository from '../database/repositories/crm-customer.reposit
 import quotationRepository from '../database/repositories/quotation.repository';
 import shipmentRepository from '../database/repositories/shipment.repository';
 import type { ImportEntityType } from '../types/excel-import.types';
-
-// Redis connection configuration
-const REDIS_CONNECTION = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379', 10),
-  password: process.env.REDIS_PASSWORD,
-};
+import { getRedisConnection } from '../config/redis.config';
 
 // Job data interface
 interface ExcelImportJobData {
@@ -59,19 +53,19 @@ class ExcelImportWorker {
   private queue: Queue;
 
   constructor() {
-    // Create queue
+    // Create queue using shared Redis connection
     this.queue = new Queue('excel-import', {
-      connection: REDIS_CONNECTION,
+      connection: getRedisConnection(),
     });
 
-    // Create worker
+    // Create worker using shared Redis connection
     this.worker = new Worker(
       'excel-import',
       async (job: Job<ExcelImportJobData>) => {
         return await this.processJob(job);
       },
       {
-        connection: REDIS_CONNECTION,
+        connection: getRedisConnection(),
         concurrency: 5,
         removeOnComplete: { count: 100 },
         removeOnFail: { count: 500 },
@@ -96,10 +90,6 @@ class ExcelImportWorker {
 
     logger.info('Excel import worker started', {
       concurrency: 5,
-      redis: {
-        host: REDIS_CONNECTION.host,
-        port: REDIS_CONNECTION.port,
-      },
     });
   }
 

@@ -1,7 +1,8 @@
 import { Queue, Worker, QueueEvents } from 'bullmq';
 import Redis from 'ioredis';
+import { loadConfig } from './config-loader';
 
-// Lazy initialization to ensure environment variables are fully loaded
+// Lazy initialization to ensure config is loaded
 let _redisConnection: Redis | null = null;
 let _redisUrl: string | null = null;
 let _maskedUrl: string | null = null;
@@ -12,16 +13,32 @@ function getRedisConfig() {
     return { url: _redisUrl, maskedUrl: _maskedUrl! };
   }
 
-  // DEBUG: Check if REDIS_URL is set - write directly to stderr so it shows in logs
-  process.stderr.write(`[REDIS-DEBUG] Reading Redis configuration...\n`);
-  process.stderr.write(`[REDIS-DEBUG] REDIS_URL env: ${process.env.REDIS_URL ? 'SET-length-' + process.env.REDIS_URL.length : 'NOT-SET'}\n`);
-  process.stderr.write(`[REDIS-DEBUG] REDIS env keys: ${Object.keys(process.env).filter(k => k.toUpperCase().includes('REDIS')).join(',')}\n`);
+  console.error('[REDIS-CONFIG] ==========================================');
+  console.error('[REDIS-CONFIG] Loading Redis configuration...');
 
-  _redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-  process.stderr.write(`[REDIS-DEBUG] Using URL: ${_redisUrl.substring(0, 30)}...\n`);
+  try {
+    // Try config file first
+    const config = loadConfig();
+    _redisUrl = config.redis.url;
+    console.error(`[REDIS-CONFIG] ✅ Redis URL loaded from config file`);
+  } catch (error: any) {
+    console.error(`[REDIS-CONFIG] ⚠️ Config file not available: ${error.message}`);
+
+    // TEMPORARY HARDCODE - Replace with proper env var/config management
+    // This is a workaround for Azure Container Apps env var injection issues
+    _redisUrl = process.env.REDIS_URL || `rediss://:${process.env.REDIS_PASSWORD || process.env.AZURE_REDIS_PASSWORD}@banxway-redis.redis.cache.windows.net:6380`;
+
+    console.error('[REDIS-CONFIG] 📋 Using hardcoded fallback (temporary workaround)');
+  }
+
+  console.error(`[REDIS-CONFIG] URL length: ${_redisUrl.length}`);
+  console.error(`[REDIS-CONFIG] URL preview: ${_redisUrl.substring(0, 40)}...`);
 
   // Mask password in URL for logging
   _maskedUrl = _redisUrl.replace(/:[^:@]+@/, ':****@');
+
+  console.error(`[REDIS-CONFIG] Final URL (masked): ${_maskedUrl}`);
+  console.error('[REDIS-CONFIG] ==========================================');
 
   return { url: _redisUrl, maskedUrl: _maskedUrl };
 }
@@ -37,7 +54,7 @@ function createRedisConnection(): Redis {
     retryDelayOnClusterDown: 100,
     retryDelayOnTryAgain: 100,
     connectTimeout: 10000,
-    commandTimeout: 5000,
+    commandTimeout: 30000, // Increased to 30s for Azure network latency
     lazyConnect: true, // Don't connect immediately
   };
 
@@ -99,8 +116,8 @@ export function getWhatsappQueue(): Queue {
       backoff: {
         type: 'exponential',
         delay: 2000,
+      },
     },
-  },
   });
 }
 

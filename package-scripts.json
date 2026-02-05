@@ -1,0 +1,6 @@
+{
+    "scripts": {
+        "seed:workflows": "ts-node src/scripts/seed-workflows.ts",
+        "deploy:migrations": "bash scripts/deploy-migrations.sh"
+    }
+}

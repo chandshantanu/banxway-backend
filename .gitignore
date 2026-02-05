@@ -68,3 +68,4 @@ test-*.js
 run-migration-*.js
 *-test.js
 migrate-*.js
+config.production.json
