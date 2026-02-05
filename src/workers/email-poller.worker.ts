@@ -494,23 +494,33 @@ const POLL_INTERVAL = parseInt(process.env.EMAIL_POLL_INTERVAL || '30000'); // 3
 const EMAIL_SYNC_DAYS = parseInt(process.env.EMAIL_SYNC_DAYS || '30'); // Sync last 30 days by default
 const EMAIL_SYNC_LIMIT = parseInt(process.env.EMAIL_SYNC_LIMIT || '500'); // Limit to 500 emails per poll
 
-// TEMPORARILY DISABLED: Automatic polling causes Redis OOM with current Basic C0 tier (271MB)
-// TODO: Re-enable after upgrading to Standard C1 Redis tier (1GB) or increase polling interval
+// AUTO-POLLING ENABLED: Upgraded to Standard C1 Redis tier (1GB)
 // Schedule polling for all inboxes
-// setInterval(() => {
-//   emailQueue.add('POLL_ALL_INBOXES', { action: 'POLL_ALL_INBOXES' });
-// }, POLL_INTERVAL);
+setInterval(() => {
+  emailQueue.add('POLL_ALL_INBOXES', {
+    action: 'POLL_ALL_INBOXES'
+  }, {
+    removeOnComplete: 10,  // Keep only last 10 completed jobs
+    removeOnFail: 5,        // Keep only last 5 failed jobs
+  });
+}, POLL_INTERVAL);
 
-// Initial poll on startup
-// setTimeout(() => {
-//   emailQueue.add('POLL_ALL_INBOXES', { action: 'POLL_ALL_INBOXES' });
-// }, 5000);
+// Initial poll on startup (delayed 10 seconds to allow services to initialize)
+setTimeout(() => {
+  emailQueue.add('POLL_ALL_INBOXES', {
+    action: 'POLL_ALL_INBOXES'
+  }, {
+    removeOnComplete: 10,
+    removeOnFail: 5,
+  });
+}, 10000);
 
-logger.info('Email poller worker started (manual mode only - auto-polling disabled due to Redis memory constraints)', {
-  pollInterval: 'DISABLED',
+logger.info('Email poller worker started with automatic polling enabled', {
+  pollInterval: `${POLL_INTERVAL}ms (${POLL_INTERVAL / 1000}s)`,
   syncDays: EMAIL_SYNC_DAYS,
   syncLimit: EMAIL_SYNC_LIMIT,
-  note: 'Use manual refresh API to poll emails'
+  redisTier: 'Standard C1 (1GB)',
+  jobRetention: { completed: 10, failed: 5 }
 });
 
 export default emailWorker;
