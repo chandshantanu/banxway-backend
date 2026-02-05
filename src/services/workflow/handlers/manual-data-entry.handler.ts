@@ -1,7 +1,7 @@
-import { supabaseAdmin } from '../../config/database.config';
-import { WorkflowNode } from '../../types/workflow';
-import { ManualDataEntryNodeConfig } from '../../types/workflow-integration-nodes';
-import { logger } from '../../utils/logger';
+import { supabaseAdmin } from '../../../config/database.config';
+import { WorkflowNode } from '../../../types/workflow';
+import { ManualDataEntryNodeConfig } from '../../../types/workflow-integration-nodes';
+import { logger } from '../../../utils/logger';
 
 /**
  * ManualDataEntryHandler
