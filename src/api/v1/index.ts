@@ -21,10 +21,12 @@ import shippersRouter from './shippers';
 import rateCardsRouter from './rate-cards';
 import shipperQuoteRequestsRouter from './shipper-quote-requests';
 import inboxRouter from './inbox';
+import threadsRouter from './communications/threads';
 
 const router = Router();
 
 // Mount route handlers
+router.use('/threads', threadsRouter); // Alias for legacy/frontend compatibility
 router.use('/inbox', inboxRouter);
 router.use('/communications', communicationsRouter);
 router.use('/shipments', shipmentsRouter);
