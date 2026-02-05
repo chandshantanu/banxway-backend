@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { authenticateRequest, type AuthenticatedRequest } from '../../../middleware/auth.middleware';
 import emailAccountService from '../../../services/email/email-account.service';
 import { CreateEmailAccountRequest, UpdateEmailAccountRequest } from '../../../database/repositories/email-account.repository';
 import { logger } from '../../../utils/logger';
@@ -7,6 +8,9 @@ import { MXLookupService } from '../../../services/email/mx-lookup.service';
 import { getEmailQueue } from '../../../config/redis.config';
 
 const router = Router();
+
+// All routes require authentication
+router.use(authenticateRequest);
 
 /**
  * GET /api/v1/settings/email-accounts
