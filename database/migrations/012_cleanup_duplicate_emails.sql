@@ -19,20 +19,18 @@ BEGIN
 END $$;
 
 -- Step 2: Add UNIQUE constraint to prevent future duplicates
--- First, ensure external_id index exists
+-- Drop old index if exists
 DROP INDEX IF EXISTS idx_messages_external_id;
-CREATE UNIQUE INDEX idx_messages_external_id_unique 
-ON communication_messages(external_id) 
-WHERE external_id IS NOT NULL;
 
--- Step 3: Add constraint
+-- Add UNIQUE constraint directly (this creates the index automatically)
+-- NULL values are allowed to duplicate in UNIQUE constraints, which is what we want
 ALTER TABLE communication_messages 
 DROP CONSTRAINT IF EXISTS unique_external_id;
 
 ALTER TABLE communication_messages
-ADD CONSTRAINT unique_external_id UNIQUE USING INDEX idx_messages_external_id_unique;
+ADD CONSTRAINT unique_external_id UNIQUE (external_id);
 
--- Step 4: Clean up orphaned threads (threads with no messages)
+-- Step 3: Clean up orphaned threads (threads with no messages)
 DELETE FROM communication_threads 
 WHERE id NOT IN (
   SELECT DISTINCT thread_id 
@@ -57,4 +55,4 @@ BEGIN
   RAISE NOTICE 'Cleanup complete: % unique emails, % total records (should match)', unique_count, total_count;
 END $$;
 
-COMMENT ON INDEX idx_messages_external_id_unique IS 'Ensures no duplicate emails can be inserted';
+COMMENT ON CONSTRAINT unique_external_id ON communication_messages IS 'Ensures no duplicate emails can be inserted (NULL values allowed)';
