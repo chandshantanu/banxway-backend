@@ -118,8 +118,8 @@ async function pollInbox(accountId: string): Promise<void> {
           return;
         }
 
-        // Calculate date for configured sync days (default 7 for real-time sync)
-        const syncDays = parseInt(process.env.EMAIL_SYNC_DAYS || '7');
+        // Calculate date for configured sync days (default 30 to catch all emails)
+        const syncDays = parseInt(process.env.EMAIL_SYNC_DAYS || '30');
         const syncLimit = parseInt(process.env.EMAIL_SYNC_LIMIT || '500');
         const syncDate = new Date();
         syncDate.setDate(syncDate.getDate() - syncDays);
@@ -492,7 +492,7 @@ async function sendEmail(data: any): Promise<void> {
 
 // Configuration - Real-time sync
 const POLL_INTERVAL = parseInt(process.env.EMAIL_POLL_INTERVAL || '15000'); // 15 seconds for real-time sync
-const EMAIL_SYNC_DAYS = parseInt(process.env.EMAIL_SYNC_DAYS || '7'); // Sync last 7 days by default
+const EMAIL_SYNC_DAYS = parseInt(process.env.EMAIL_SYNC_DAYS || '30'); // Sync last 30 days to catch all emails
 const EMAIL_SYNC_LIMIT = parseInt(process.env.EMAIL_SYNC_LIMIT || '500'); // Limit to 500 emails per poll
 
 // AUTO-POLLING ENABLED: Upgraded to Standard C1 Redis tier (1GB)
