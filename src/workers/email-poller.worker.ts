@@ -60,14 +60,19 @@ emailWorker.on('failed', (job, error) => {
  */
 async function pollAllInboxes(): Promise<void> {
   try {
+    logger.info('🔍 Checking for email accounts to poll...');
+
     const accounts = await emailAccountService.getPollingAccounts();
 
     if (accounts.length === 0) {
-      logger.debug('No email accounts configured for polling');
+      logger.info('ℹ️  No email accounts configured for polling');
       return;
     }
 
-    logger.info(`Polling ${accounts.length} email inbox(es)...`);
+    logger.info(`📬 Polling ${accounts.length} email inbox(es)...`, {
+      accountIds: accounts.map(a => a.id),
+      emails: accounts.map(a => a.email),
+    });
 
     // Queue individual poll jobs for each account
     for (const account of accounts) {
@@ -85,19 +90,26 @@ async function pollAllInboxes(): Promise<void> {
  * Poll a specific inbox
  */
 async function pollInbox(accountId: string): Promise<void> {
+  logger.info('📧 Starting email poll for account', { accountId });
+
   const account = await emailAccountService.getAccountWithCredentials(accountId);
 
   if (!account) {
-    logger.error('Email account not found for polling', { accountId });
+    logger.error('❌ Email account not found for polling', { accountId });
     return;
   }
 
   if (!account.imap_enabled) {
-    logger.debug('IMAP polling disabled for account', { accountId, email: account.email });
+    logger.info('⏭️  IMAP polling disabled for account', { accountId, email: account.email });
     return;
   }
 
-  logger.info('Polling email inbox', { accountId, email: account.email });
+  logger.info('🔄 Connecting to IMAP inbox', {
+    accountId,
+    email: account.email,
+    host: account.imap_host,
+    port: account.imap_port,
+  });
 
   return new Promise((resolve, reject) => {
     const imap = new Imap({
@@ -206,17 +218,21 @@ async function pollInbox(accountId: string): Promise<void> {
  */
 async function processEmail(emailBuffer: string, accountId: string): Promise<void> {
   try {
+    logger.info('📨 Processing email from buffer', { accountId, bufferSize: emailBuffer.length });
+
     const parsed = await parseEmailBuffer(Buffer.from(emailBuffer));
 
     // Get the email account for context
     const account = await emailAccountRepository.findById(accountId);
 
-    logger.info('Processing email', {
+    logger.info('✉️  Email parsed successfully', {
       accountId,
       accountEmail: account?.email,
       from: parsed.from.address,
+      to: parsed.to,
       subject: parsed.subject,
       messageId: parsed.messageId,
+      hasAttachments: (parsed.attachments?.length || 0) > 0,
     });
 
     // Check if message already exists (avoid duplicates)
@@ -306,20 +322,27 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
     // Handle duplicate key error (23505 = unique violation)
     if (insertError) {
       if (insertError.code === '23505') {
-        logger.debug('Duplicate email detected by database constraint, skipping', {
+        logger.info('⏭️  Duplicate email skipped (already in database)', {
           messageId: parsed.messageId,
-          error: insertError.message,
+          from: parsed.from.address,
+          subject: parsed.subject,
         });
         return; // Skip silently
       }
+      logger.error('❌ Failed to insert email into database', {
+        error: insertError.message,
+        code: insertError.code,
+      });
       throw insertError; // Re-throw other errors
     }
 
     if (message) {
-      logger.info('Email processed successfully', {
+      logger.info('✅ Email processed and saved successfully', {
         threadId: thread.id,
         messageId: message.id,
         accountId,
+        from: parsed.from.address,
+        subject: parsed.subject,
       });
 
       // Emit WebSocket event

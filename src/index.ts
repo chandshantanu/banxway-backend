@@ -140,7 +140,13 @@ async function startServer() {
 
       // Explicitly connect (since we set lazyConnect: true)
       logger.info('Connecting to Redis...');
-      await redisConnection.connect();
+
+      // Check if already connected or connecting
+      if (redisConnection.status === 'ready' || redisConnection.status === 'connecting') {
+        logger.info('Redis already connected/connecting');
+      } else {
+        await redisConnection.connect();
+      }
 
       // Test with ping
       logger.info('Pinging Redis...');
