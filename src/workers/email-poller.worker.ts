@@ -135,12 +135,18 @@ async function pollInbox(accountId: string): Promise<void> {
         const syncLimit = parseInt(process.env.EMAIL_SYNC_LIMIT || '500');
         const syncDate = new Date();
         syncDate.setDate(syncDate.getDate() - syncDays);
-        const sinceDate = syncDate.toISOString().split('T')[0].replace(/-/g, '-');
+
+        // Format date as DD-MMM-YYYY for IMAP (e.g., "05-Feb-2026")
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const day = syncDate.getDate().toString().padStart(2, '0');
+        const month = monthNames[syncDate.getMonth()];
+        const year = syncDate.getFullYear();
+        const sinceDate = `${day}-${month}-${year}`;
 
         // Search for ALL emails from last N days (real-time sync)
         // Database UNIQUE constraint on external_id prevents duplicate processing
         // markSeen: false keeps emails unread in inbox
-        imap.search(['SINCE', sinceDate], (err, results) => {
+        imap.search([['SINCE', sinceDate]], (err, results) => {
           if (err) {
             logger.error('Error searching emails', { accountId, error: err.message });
             emailAccountService.updatePollStatus(accountId, 'FAILED', err.message);
