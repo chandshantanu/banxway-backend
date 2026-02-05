@@ -31,7 +31,7 @@ export class ThreadRepository {
 
   async findAll(filters: ThreadFilters = {}, pagination: PaginationParams = {}) {
     // Extract pagination parameters outside try block for catch block access
-    const { page = 1, limit = 20, sortBy = 'created_at', sortOrder = 'desc' } = pagination;
+    const { page = 1, limit = 100, sortBy = 'created_at', sortOrder = 'desc' } = pagination;
 
     try {
       const {

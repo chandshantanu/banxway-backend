@@ -16,6 +16,76 @@ const router = Router();
 // No need to apply it again here
 
 /**
+ * Get all messages across all threads (unified inbox view)
+ * GET /api/v1/communications/messages/all?limit=100&offset=0&channel=EMAIL
+ */
+router.get('/all', requirePermission(Permission.VIEW_THREADS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { limit = 100, offset = 0, channel, dateFrom, dateTo } = req.query;
+
+    let query = supabaseAdmin
+      .from('communication_messages')
+      .select(`
+        *,
+        communication_threads!inner (
+          id,
+          reference,
+          type,
+          status,
+          priority,
+          customer_id,
+          customers (
+            id,
+            name,
+            email,
+            phone
+          )
+        )
+      `, { count: 'exact' });
+
+    // Filter by channel if specified
+    if (channel) {
+      query = query.eq('channel', channel);
+    }
+
+    // Filter by date range if specified
+    if (dateFrom) {
+      query = query.gte('created_at', dateFrom);
+    }
+    if (dateTo) {
+      query = query.lte('created_at', dateTo);
+    }
+
+    // Order by created_at descending and paginate
+    query = query
+      .order('created_at', { ascending: false })
+      .range(Number(offset), Number(offset) + Number(limit) - 1);
+
+    const { data: messages, error, count } = await query;
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.json({
+      success: true,
+      data: messages || [],
+      pagination: {
+        limit: Number(limit),
+        offset: Number(offset),
+        total: count || 0,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Failed to fetch all messages', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
  * Get messages for a thread
  * GET /api/v1/communications/messages?threadId=xxx&limit=50&offset=0
  */
@@ -46,12 +116,19 @@ router.get('/', requirePermission(Permission.VIEW_THREADS), async (req: Authenti
       return;
     }
 
-    // Get messages
+    // Get messages with sender information
     const { data: messages, error, count } = await supabaseAdmin
       .from('communication_messages')
-      .select('*', { count: 'exact' })
+      .select(`
+        *,
+        sent_by_user:users!sent_by (
+          id,
+          full_name,
+          email
+        )
+      `, { count: 'exact' })
       .eq('thread_id', threadId)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: true })
       .range(Number(offset), Number(offset) + Number(limit) - 1);
 
     if (error) {
