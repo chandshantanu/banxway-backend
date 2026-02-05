@@ -8,9 +8,9 @@ import {
 } from '../../types';
 import { generateReference } from '../../utils/helpers';
 import { logger } from '../../utils/logger';
-import { 
+import {
   NotFoundError as ErrorNotFound,
-  DatabaseError 
+  DatabaseError
 } from '../../middleware/error.middleware';
 
 // Keep the NotFoundError from types for backward compatibility
@@ -52,7 +52,7 @@ export class ThreadRepository {
             phone,
             company
           ),
-          users!communication_threads_assigned_to_fkey (
+          users (
             id,
             full_name,
             email
@@ -122,7 +122,7 @@ export class ThreadRepository {
       const { data, error, count } = await query;
 
       if (error) {
-        logger.error('Database error fetching threads', { 
+        logger.error('Database error fetching threads', {
           error: { message: error.message, code: error.code }
         });
         throw new DatabaseError('Failed to fetch threads');
@@ -139,7 +139,7 @@ export class ThreadRepository {
       if (error instanceof DatabaseError) {
         throw error;
       }
-      logger.error('Unexpected error in findAll', { 
+      logger.error('Unexpected error in findAll', {
         error: { message: (error as Error).message }
       });
       throw new DatabaseError('Failed to fetch threads');
@@ -164,7 +164,7 @@ export class ThreadRepository {
             phone,
             company
           ),
-          users!communication_threads_assigned_to_fkey (
+          users (
             id,
             full_name,
             email
@@ -178,7 +178,7 @@ export class ThreadRepository {
           // Not found error from PostgREST
           throw new ErrorNotFound('Thread');
         }
-        logger.error('Database error fetching thread', { 
+        logger.error('Database error fetching thread', {
           threadId: id,
           error: { message: error.message, code: error.code }
         });
@@ -194,7 +194,7 @@ export class ThreadRepository {
       if (error instanceof ErrorNotFound || error instanceof DatabaseError) {
         throw error;
       }
-      logger.error('Unexpected error in findById', { 
+      logger.error('Unexpected error in findById', {
         threadId: id,
         error: { message: (error as Error).message }
       });
@@ -247,7 +247,7 @@ export class ThreadRepository {
         .single();
 
       if (error) {
-        logger.error('Database error creating thread', { 
+        logger.error('Database error creating thread', {
           error: { message: error.message, code: error.code }
         });
         throw new DatabaseError('Failed to create thread');
@@ -262,7 +262,7 @@ export class ThreadRepository {
       if (error instanceof DatabaseError) {
         throw error;
       }
-      logger.error('Unexpected error in create', { 
+      logger.error('Unexpected error in create', {
         error: { message: (error as Error).message }
       });
       throw new DatabaseError('Failed to create thread');
@@ -293,7 +293,7 @@ export class ThreadRepository {
           // Not found error from PostgREST
           throw new ErrorNotFound('Thread');
         }
-        logger.error('Database error updating thread', { 
+        logger.error('Database error updating thread', {
           threadId: id,
           error: { message: error.message, code: error.code }
         });
@@ -309,7 +309,7 @@ export class ThreadRepository {
       if (error instanceof ErrorNotFound || error instanceof DatabaseError) {
         throw error;
       }
-      logger.error('Unexpected error in update', { 
+      logger.error('Unexpected error in update', {
         threadId: id,
         error: { message: (error as Error).message }
       });
@@ -333,7 +333,7 @@ export class ThreadRepository {
         if (error.code === 'PGRST116') {
           throw new ErrorNotFound('Thread');
         }
-        logger.error('Database error deleting thread', { 
+        logger.error('Database error deleting thread', {
           threadId: id,
           error: { message: error.message, code: error.code }
         });
@@ -343,7 +343,7 @@ export class ThreadRepository {
       if (error instanceof ErrorNotFound || error instanceof DatabaseError) {
         throw error;
       }
-      logger.error('Unexpected error in delete', { 
+      logger.error('Unexpected error in delete', {
         threadId: id,
         error: { message: (error as Error).message }
       });
@@ -358,13 +358,13 @@ export class ThreadRepository {
 
       // Avoid duplicates
       const uniqueFollowers = Array.from(new Set(followers));
-      
+
       await this.update(threadId, { followers: uniqueFollowers });
     } catch (error) {
       if (error instanceof ErrorNotFound || error instanceof DatabaseError) {
         throw error;
       }
-      logger.error('Unexpected error in addFollower', { 
+      logger.error('Unexpected error in addFollower', {
         threadId,
         userId,
         error: { message: (error as Error).message }
@@ -383,7 +383,7 @@ export class ThreadRepository {
       if (error instanceof ErrorNotFound || error instanceof DatabaseError) {
         throw error;
       }
-      logger.error('Unexpected error in removeFollower', { 
+      logger.error('Unexpected error in removeFollower', {
         threadId,
         userId,
         error: { message: (error as Error).message }
@@ -404,7 +404,7 @@ export class ThreadRepository {
       if (error instanceof ErrorNotFound || error instanceof DatabaseError) {
         throw error;
       }
-      logger.error('Unexpected error in linkShipment', { 
+      logger.error('Unexpected error in linkShipment', {
         threadId,
         shipmentId,
         error: { message: (error as Error).message }
