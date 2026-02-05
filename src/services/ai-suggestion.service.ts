@@ -1,6 +1,6 @@
-import { supabaseAdmin } from '../../config/database.config';
-import { logger } from '../../utils/logger';
-import { AppError } from '../../middleware/error.middleware';
+import { supabaseAdmin } from '../config/database.config';
+import { logger } from '../utils/logger';
+import { AppError } from '../middleware/error.middleware';
 
 export interface AISuggestion {
     id?: string;
