@@ -118,16 +118,17 @@ async function pollInbox(accountId: string): Promise<void> {
           return;
         }
 
-        // Calculate date for configured sync days (default 30)
-        const syncDays = parseInt(process.env.EMAIL_SYNC_DAYS || '30');
+        // Calculate date for configured sync days (default 7 for real-time sync)
+        const syncDays = parseInt(process.env.EMAIL_SYNC_DAYS || '7');
         const syncLimit = parseInt(process.env.EMAIL_SYNC_LIMIT || '500');
         const syncDate = new Date();
         syncDate.setDate(syncDate.getDate() - syncDays);
         const sinceDate = syncDate.toISOString().split('T')[0].replace(/-/g, '-');
 
-        // Search for UNSEEN emails from last N days (prevents re-fetching same emails)
-        // This combined with the UNIQUE constraint prevents duplicate processing
-        imap.search([['UNSEEN', 'SINCE', sinceDate]], (err, results) => {
+        // Search for ALL emails from last N days (real-time sync)
+        // Database UNIQUE constraint on external_id prevents duplicate processing
+        // markSeen: false keeps emails unread in inbox
+        imap.search(['SINCE', sinceDate], (err, results) => {
           if (err) {
             logger.error('Error searching emails', { accountId, error: err.message });
             emailAccountService.updatePollStatus(accountId, 'FAILED', err.message);
@@ -136,14 +137,14 @@ async function pollInbox(accountId: string): Promise<void> {
           }
 
           if (!results || results.length === 0) {
-            logger.debug(`No emails found in last ${syncDays} days`, { accountId, email: account.email });
+            logger.debug(`No new emails found in last ${syncDays} days`, { accountId, email: account.email });
             emailAccountService.updatePollStatus(accountId, 'SUCCESS');
             imap.end();
             resolve();
             return;
           }
 
-          logger.info(`Found ${results.length} email(s) in last ${syncDays} days`, { accountId, email: account.email });
+          logger.info(`Found ${results.length} email(s) in last ${syncDays} days (real-time sync)`, { accountId, email: account.email });
 
           // Limit to most recent N emails to avoid overwhelming the system
           const emailsToFetch = results.slice(-syncLimit);
@@ -489,9 +490,9 @@ async function sendEmail(data: any): Promise<void> {
   }
 }
 
-// Configuration
-const POLL_INTERVAL = parseInt(process.env.EMAIL_POLL_INTERVAL || '30000'); // 30 seconds default
-const EMAIL_SYNC_DAYS = parseInt(process.env.EMAIL_SYNC_DAYS || '30'); // Sync last 30 days by default
+// Configuration - Real-time sync
+const POLL_INTERVAL = parseInt(process.env.EMAIL_POLL_INTERVAL || '15000'); // 15 seconds for real-time sync
+const EMAIL_SYNC_DAYS = parseInt(process.env.EMAIL_SYNC_DAYS || '7'); // Sync last 7 days by default
 const EMAIL_SYNC_LIMIT = parseInt(process.env.EMAIL_SYNC_LIMIT || '500'); // Limit to 500 emails per poll
 
 // AUTO-POLLING ENABLED: Upgraded to Standard C1 Redis tier (1GB)
@@ -515,10 +516,11 @@ setTimeout(() => {
   });
 }, 10000);
 
-logger.info('Email poller worker started with automatic polling enabled', {
+logger.info('Email poller worker started - REAL-TIME SYNC MODE', {
   pollInterval: `${POLL_INTERVAL}ms (${POLL_INTERVAL / 1000}s)`,
   syncDays: EMAIL_SYNC_DAYS,
   syncLimit: EMAIL_SYNC_LIMIT,
+  syncMode: 'ALL emails (not just UNSEEN)',
   redisTier: 'Standard C1 (1GB)',
   jobRetention: { completed: 10, failed: 5 }
 });
