@@ -141,11 +141,17 @@ async function startServer() {
       // Explicitly connect (since we set lazyConnect: true)
       logger.info('Connecting to Redis...');
 
-      // Check if already connected or connecting
-      if (redisConnection.status === 'ready' || redisConnection.status === 'connecting') {
-        logger.info('Redis already connected/connecting');
-      } else {
+      // Try to connect, but allow if already connected
+      try {
         await redisConnection.connect();
+        logger.info('Redis connection initiated');
+      } catch (connectError: any) {
+        // Allow if already connected/connecting (this can happen if workers loaded first)
+        if (connectError.message && connectError.message.includes('already connect')) {
+          logger.info('Redis already connected');
+        } else {
+          throw connectError; // Re-throw other errors
+        }
       }
 
       // Test with ping
@@ -154,7 +160,7 @@ async function startServer() {
         redisConnection.ping(),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Redis ping timeout')), 10000))
       ]);
-      logger.info('Redis connection successful');
+      logger.info('✅ Redis connection successful');
       redisConnected = true;
     } catch (redisError: any) {
       logger.warn('Redis connection failed (non-fatal)', {
