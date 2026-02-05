@@ -343,6 +343,12 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
     }
 
     if (message) {
+      // Increment message counts on thread atomically
+      await supabaseAdmin.rpc('increment_thread_message_count', {
+        p_thread_id: thread.id,
+        p_is_inbound: true,
+      });
+
       logger.info('✅ Email processed and saved successfully', {
         threadId: thread.id,
         messageId: message.id,
