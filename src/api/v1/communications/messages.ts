@@ -116,22 +116,16 @@ router.get('/', requirePermission(Permission.VIEW_THREADS), async (req: Authenti
       return;
     }
 
-    // Get messages with sender information
+    // Get messages - without user join as FK may not exist
     const { data: messages, error, count } = await supabaseAdmin
       .from('communication_messages')
-      .select(`
-        *,
-        sent_by_user:users!sent_by (
-          id,
-          full_name,
-          email
-        )
-      `, { count: 'exact' })
+      .select('*', { count: 'exact' })
       .eq('thread_id', threadId)
       .order('created_at', { ascending: true })
       .range(Number(offset), Number(offset) + Number(limit) - 1);
 
     if (error) {
+      logger.error('Failed to fetch messages from DB', { error: error.message, threadId });
       throw new Error(error.message);
     }
 
