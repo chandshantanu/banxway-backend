@@ -10,6 +10,7 @@ import {
 import exotelTelephony from '../exotel/telephony.service';
 import exotelWhatsApp from '../exotel/whatsapp.service';
 import { io } from '../../index';
+import tatService from './tat-service';
 
 export class WorkflowEngine {
   /**
@@ -79,6 +80,64 @@ export class WorkflowEngine {
         instanceId: created.id,
         workflowId: params.workflowDefinitionId,
       });
+
+      // Calculate TAT deadline and set on thread/shipment
+      if (workflowDef.slaConfig && workflowDef.slaConfig.resolutionTimeMinutes) {
+        try {
+          const priority = (params as any).priority || 'MEDIUM';
+          const deadline = tatService.calculateTATDeadline(
+            new Date(created.started_at),
+            workflowDef.slaConfig,
+            priority
+          );
+
+          logger.info('TAT deadline calculated', {
+            instanceId: created.id,
+            deadlineAt: deadline.deadlineAt,
+            priority,
+            totalMinutes: deadline.totalMinutes,
+          });
+
+          // Update thread with TAT deadline
+          if (params.threadId) {
+            await supabaseAdmin
+              .from('communication_threads')
+              .update({
+                sla_deadline: deadline.deadlineAt.toISOString(),
+                tat_status: 'ON_TRACK',
+                sla_status: 'WITHIN_SLA',
+              })
+              .eq('id', params.threadId);
+
+            logger.info('Thread TAT deadline set', {
+              threadId: params.threadId,
+              deadlineAt: deadline.deadlineAt,
+            });
+          }
+
+          // Update shipment with TAT deadline
+          if (params.shipmentId) {
+            await supabaseAdmin
+              .from('shipments')
+              .update({
+                expected_completion_at: deadline.deadlineAt.toISOString(),
+                tat_status: 'ON_TRACK',
+              })
+              .eq('id', params.shipmentId);
+
+            logger.info('Shipment TAT deadline set', {
+              shipmentId: params.shipmentId,
+              deadlineAt: deadline.deadlineAt,
+            });
+          }
+        } catch (error: any) {
+          logger.error('Failed to set TAT deadline', {
+            instanceId: created.id,
+            error: error.message,
+          });
+          // Don't fail the workflow if TAT setting fails
+        }
+      }
 
       // Start execution
       await this.executeNextNode(created.id);
@@ -156,6 +215,32 @@ export class WorkflowEngine {
 
       workflowInstance.executionLog.push(logEntry);
       workflowInstance.currentStepNumber += 1;
+
+      // Update stage transition tracking for shipments
+      if (workflowInstance.shipmentId && (currentNode.config as any).shipmentStage) {
+        try {
+          await supabaseAdmin
+            .from('shipment_stage_history')
+            .insert({
+              shipment_id: workflowInstance.shipmentId,
+              stage: (currentNode.config as any).shipmentStage,
+              entered_at: new Date().toISOString(),
+              notes: `Workflow step: ${currentNode.label}`,
+            });
+
+          logger.info('Shipment stage transition recorded', {
+            shipmentId: workflowInstance.shipmentId,
+            stage: (currentNode.config as any).shipmentStage,
+            nodeId: currentNode.id,
+          });
+        } catch (error: any) {
+          logger.error('Failed to record shipment stage transition', {
+            shipmentId: workflowInstance.shipmentId,
+            error: error.message,
+          });
+          // Don't fail workflow if stage tracking fails
+        }
+      }
 
       // Update instance
       await supabaseAdmin

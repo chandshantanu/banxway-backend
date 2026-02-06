@@ -1,51 +1,30 @@
-/**
- * Jest Configuration
- *
- * Test runner configuration for unit, integration, and E2E tests.
- */
-
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>/tests', '<rootDir>/src'],
-  testMatch: [
-    '**/__tests__/**/*.+(ts|tsx|js)',
-    '**/?(*.)+(spec|test).+(ts|tsx|js)',
-  ],
+  testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts'],
   transform: {
-    '^.+\\.(ts|tsx)$': 'ts-jest',
+    '^.+\\.ts$': 'ts-jest',
   },
   collectCoverageFrom: [
-    'src/**/*.{ts,tsx}',
+    'src/**/*.ts',
     '!src/**/*.d.ts',
-    '!src/**/*.test.{ts,tsx}',
+    '!src/**/*.test.ts',
     '!src/index.ts',
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
-  testTimeout: 30000,
-  verbose: true,
-
-  // Separate test suites
-  projects: [
-    {
-      displayName: 'unit',
-      testMatch: ['<rootDir>/tests/unit/**/*.test.ts'],
-      testEnvironment: 'node',
+  globals: {
+    'ts-jest': {
+      tsconfig: {
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+      },
     },
-    {
-      displayName: 'integration',
-      testMatch: ['<rootDir>/tests/integration/**/*.test.ts'],
-      testEnvironment: 'node',
-    },
-    {
-      displayName: 'e2e',
-      testMatch: ['<rootDir>/tests/e2e/**/*.test.ts'],
-      testEnvironment: 'node',
-    },
-  ],
+  },
+  testTimeout: 10000,
 };
