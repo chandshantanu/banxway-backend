@@ -36,14 +36,12 @@ export async function checkSLADeadlines() {
         // Create in-app notification
         if (instance.assignedTo) {
           await notificationRepository.create({
-            userId: instance.assignedTo,
+            user_id: instance.assignedTo,
             type: 'SLA_WARNING',
             title: `TAT Warning: ${instance.workflowName}`,
             message: `${instance.entityType} approaching deadline in ${instance.timeRemaining} minutes`,
-            entityType: instance.entityType,
-            entityId: instance.entityId,
-            priority: 'HIGH',
-            actionUrl: `/workflows/${instance.id}`,
+            thread_id: instance.threadId,
+            action_url: `/workflows/${instance.id}`,
           });
         }
 
@@ -86,14 +84,12 @@ export async function checkSLADeadlines() {
         // Create breach notification
         if (instance.assignedTo) {
           await notificationRepository.create({
-            userId: instance.assignedTo,
+            user_id: instance.assignedTo,
             type: 'SLA_BREACH',
             title: `TAT BREACH: ${instance.workflowName}`,
             message: `${instance.entityType} overdue by ${instance.overdueMinutes} minutes`,
-            entityType: instance.entityType,
-            entityId: instance.entityId,
-            priority: 'CRITICAL',
-            actionUrl: `/workflows/${instance.id}`,
+            thread_id: instance.threadId,
+            action_url: `/workflows/${instance.id}`,
           });
         }
 
@@ -209,7 +205,7 @@ export async function sendReminder(
             await emailSenderService.sendEmail({
               to: user.email,
               subject: `TAT Warning: ${instance.workflowName}`,
-              body: `
+              html: `
                 <h2>TAT Warning</h2>
                 <p>Hi ${user.full_name},</p>
                 <p>${message}</p>
@@ -228,7 +224,7 @@ export async function sendReminder(
           if (user.phone) {
             await exotelSms.sendSMS({
               to: user.phone,
-              message: `TAT Warning: ${instance.workflowName} deadline in ${instance.timeRemaining}min. Check Banxway dashboard.`,
+              body: `TAT Warning: ${instance.workflowName} deadline in ${instance.timeRemaining}min. Check Banxway dashboard.`,
             });
             logger.info('TAT warning SMS sent', { recipientId, workflowId: instance.id });
           }
@@ -238,7 +234,7 @@ export async function sendReminder(
           if (user.phone) {
             await exotelWhatsApp.sendTextMessage({
               to: user.phone,
-              message: `*TAT Warning*\n\n${message}\n\nTime Remaining: ${instance.timeRemaining} minutes\nWorkflow: ${instance.workflowName}\n\nPlease check the dashboard for details.`,
+              text: `*TAT Warning*\n\n${message}\n\nTime Remaining: ${instance.timeRemaining} minutes\nWorkflow: ${instance.workflowName}\n\nPlease check the dashboard for details.`,
             });
             logger.info('TAT warning WhatsApp sent', { recipientId, workflowId: instance.id });
           }
@@ -249,7 +245,7 @@ export async function sendReminder(
             await exotelTelephony.makeCall({
               from: process.env.EXOTEL_PHONE_NUMBER || '',
               to: user.phone,
-              callType: 'OUTBOUND',
+              virtualNumber: process.env.EXOTEL_PHONE_NUMBER || '',
             });
             logger.info('TAT warning call initiated', { recipientId, workflowId: instance.id });
           }
@@ -294,7 +290,7 @@ export async function sendEscalation(
             await emailSenderService.sendEmail({
               to: user.email,
               subject: `🚨 TAT BREACH: ${instance.workflowName}`,
-              body: `
+              html: `
                 <h2 style="color: #d32f2f;">TAT BREACH - IMMEDIATE ACTION REQUIRED</h2>
                 <p>Hi ${user.full_name},</p>
                 <p><strong>${message}</strong></p>
@@ -314,7 +310,7 @@ export async function sendEscalation(
           if (user.phone) {
             await exotelSms.sendSMS({
               to: user.phone,
-              message: `URGENT: ${instance.workflowName} BREACHED TAT by ${instance.overdueMinutes}min. Immediate action required!`,
+              body: `URGENT: ${instance.workflowName} BREACHED TAT by ${instance.overdueMinutes}min. Immediate action required!`,
             });
             logger.info('TAT breach SMS sent', { recipientId, workflowId: instance.id });
           }
@@ -324,7 +320,7 @@ export async function sendEscalation(
           if (user.phone) {
             await exotelWhatsApp.sendTextMessage({
               to: user.phone,
-              message: `🚨 *TAT BREACH - URGENT*\n\n${message}\n\nOverdue By: ${instance.overdueMinutes} minutes\nWorkflow: ${instance.workflowName}\n\n*IMMEDIATE ACTION REQUIRED*\nPlease escalate this to your manager immediately.`,
+              text: `🚨 *TAT BREACH - URGENT*\n\n${message}\n\nOverdue By: ${instance.overdueMinutes} minutes\nWorkflow: ${instance.workflowName}\n\n*IMMEDIATE ACTION REQUIRED*\nPlease escalate this to your manager immediately.`,
             });
             logger.info('TAT breach WhatsApp sent', { recipientId, workflowId: instance.id });
           }
@@ -335,7 +331,7 @@ export async function sendEscalation(
             await exotelTelephony.makeCall({
               from: process.env.EXOTEL_PHONE_NUMBER || '',
               to: user.phone,
-              callType: 'OUTBOUND',
+              virtualNumber: process.env.EXOTEL_PHONE_NUMBER || '',
             });
             logger.info('TAT breach call initiated', { recipientId, workflowId: instance.id });
           }

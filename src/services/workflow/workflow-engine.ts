@@ -87,7 +87,7 @@ export class WorkflowEngine {
           const priority = (params as any).priority || 'MEDIUM';
           const deadline = tatService.calculateTATDeadline(
             new Date(created.started_at),
-            workflowDef.slaConfig,
+            workflowDef.slaConfig as any,
             priority
           );
 
