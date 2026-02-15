@@ -20,14 +20,16 @@ import excelImportRouter from './excel-import';
 import shippersRouter from './shippers';
 import rateCardsRouter from './rate-cards';
 import shipperQuoteRequestsRouter from './shipper-quote-requests';
-import { conditionalAuth } from '../../middleware/dev-auth.middleware';
+import { authenticateRequest } from '../../middleware/auth.middleware';
 import inboxRouter from './inbox';
 import threadsRouter from './communications/threads';
+import agentsRouter from './agents';
+import agentWebhooksRouter from './agent-webhooks';
 
 const router = Router();
 
 // Mount route handlers
-router.use('/threads', conditionalAuth, threadsRouter); // Alias for legacy/frontend compatibility
+router.use('/threads', authenticateRequest, threadsRouter); // Alias for legacy/frontend compatibility
 router.use('/inbox', inboxRouter);
 router.use('/communications', communicationsRouter);
 router.use('/shipments', shipmentsRouter);
@@ -49,6 +51,8 @@ router.use('/excel-import', excelImportRouter);
 router.use('/shippers', shippersRouter);
 router.use('/rate-cards', rateCardsRouter);
 router.use('/shipper-quote-requests', shipperQuoteRequestsRouter);
+router.use('/agents', agentsRouter);
+router.use('/agent-webhooks', agentWebhooksRouter);
 
 // Test endpoints (development only)
 if (process.env.NODE_ENV !== 'production') {
@@ -85,6 +89,8 @@ router.get('/', (req, res) => {
     excelImport: '/api/v1/excel-import',
     shippers: '/api/v1/shippers',
     rateCards: '/api/v1/rate-cards',
+    agents: '/api/v1/agents',
+    agentWebhooks: '/api/v1/agent-webhooks',
   };
 
   if (process.env.NODE_ENV !== 'production') {
