@@ -55,23 +55,23 @@ interface OrderClause {
 }
 
 class QueryBuilder<T = any> {
-  private table: string;
-  private operation: 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'UPSERT' = 'SELECT';
-  private selectColumns: string = '*';
-  private whereClauses: WhereClause[] = [];
-  private orClauses: string[] = [];
-  private orderClauses: OrderClause[] = [];
-  private limitValue?: number;
-  private offsetValue?: number;
-  private rangeFrom?: number;
-  private rangeTo?: number;
-  private isSingle: boolean = false;
-  private isMaybeSingle: boolean = false;
-  private insertData: any = null;
-  private updateData: any = null;
-  private upsertConflict?: string;
-  private returnSelect: string | null = null;
-  private countMode: 'exact' | null = null;
+  table: string;
+  operation: 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'UPSERT' = 'SELECT';
+  selectColumns: string = '*';
+  whereClauses: WhereClause[] = [];
+  orClauses: string[] = [];
+  orderClauses: OrderClause[] = [];
+  limitValue?: number;
+  offsetValue?: number;
+  rangeFrom?: number;
+  rangeTo?: number;
+  isSingle: boolean = false;
+  isMaybeSingle: boolean = false;
+  insertData: any = null;
+  updateData: any = null;
+  upsertConflict?: string;
+  returnSelect: string | null = null;
+  countMode: 'exact' | null = null;
 
   constructor(table: string) {
     this.table = table;
@@ -222,7 +222,7 @@ class QueryBuilder<T = any> {
 
   // Chain .select() after .insert()/.update()/.delete() to return data
   // This is already handled — if select is called after insert/update, set returnSelect
-  private buildWhereClause(params: any[]): string {
+  buildWhereClause(params: any[]): string {
     if (this.whereClauses.length === 0 && this.orClauses.length === 0) return '';
 
     const conditions: string[] = [];
@@ -276,7 +276,7 @@ class QueryBuilder<T = any> {
     return conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
   }
 
-  private buildOrderClause(): string {
+  buildOrderClause(): string {
     if (this.orderClauses.length === 0) return '';
     const parts = this.orderClauses.map(o => {
       let s = `"${o.column}" ${o.ascending ? 'ASC' : 'DESC'}`;
@@ -288,7 +288,7 @@ class QueryBuilder<T = any> {
     return ` ORDER BY ${parts.join(', ')}`;
   }
 
-  private buildLimitOffset(): string {
+  buildLimitOffset(): string {
     let sql = '';
     if (this.rangeFrom !== undefined && this.rangeTo !== undefined) {
       sql += ` LIMIT ${this.rangeTo - this.rangeFrom + 1} OFFSET ${this.rangeFrom}`;
@@ -300,7 +300,7 @@ class QueryBuilder<T = any> {
   }
 
   // Parse select columns — handle basic column lists, ignore relation syntax
-  private parseSelectColumns(): string {
+  parseSelectColumns(): string {
     if (this.selectColumns === '*') return '*';
 
     // Remove relation blocks like "table (...)" — these are Supabase PostgREST joins
@@ -452,7 +452,7 @@ class QueryBuilder<T = any> {
   }
 
   // Duplicate where clause builder for count query (separate params array)
-  private buildWhereClauseForCount(params: any[]): string {
+  buildWhereClauseForCount(params: any[]): string {
     // Re-run the where clause builder with a fresh params array
     const saved = [...this.whereClauses];
     const savedOr = [...this.orClauses];
