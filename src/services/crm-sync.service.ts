@@ -88,7 +88,7 @@ class CrmSyncService {
 
     try {
       // Fetch user from Supabase Auth
-      const { data: { user }, error } = await supabaseAdminAuth?.auth.admin.getUserById(userId);
+      const { data: { user }, error } = await supabaseAuth?.auth.admin.getUserById(userId);
 
       if (error || !user) {
         throw new Error(`User not found: ${userId}`);
@@ -114,7 +114,7 @@ class CrmSyncService {
       let espoUserId: string;
 
       // Check if user already exists in EspoCRM
-      const { data: users } = await supabaseAdminAdmin
+      const { data: users } = await supabaseAdmin
         .from('users')
         .select('espocrm_user_id')
         .eq('id', userId)
@@ -266,7 +266,7 @@ class CrmSyncService {
 
     try {
       // Fetch contact
-      const { data: contact, error } = await supabaseAdminAdmin
+      const { data: contact, error } = await supabaseAdmin
         .from('crm_contacts')
         .select('*')
         .eq('id', contactId)
@@ -428,7 +428,7 @@ class CrmSyncService {
       logger.info('Received EspoCRM account webhook', { espoAccountId });
 
       // Find customer by EspoCRM ID
-      const { data: customers, error } = await supabaseAdminAdmin
+      const { data: customers, error } = await supabaseAdmin
         .from('crm_customers')
         .select('*')
         .eq('espocrm_account_id', espoAccountId)
@@ -516,7 +516,7 @@ class CrmSyncService {
    */
   private async logSync(log: SyncLog): Promise<void> {
     try {
-      await supabaseAdminAdmin.from('crm_sync_logs').insert(log);
+      await supabaseAdmin.from('crm_sync_logs').insert(log);
     } catch (error: any) {
       logger.error('Failed to log CRM sync', { error: error.message });
     }
@@ -532,7 +532,7 @@ class CrmSyncService {
     lastSync: string | null;
   }> {
     try {
-      const { data: logs, error } = await supabaseAdminAdmin
+      const { data: logs, error } = await supabaseAdmin
         .from('crm_sync_logs')
         .select('status, synced_at')
         .order('synced_at', { ascending: false });
