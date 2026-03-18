@@ -17,7 +17,7 @@ router.get('/online', async (req: AuthenticatedRequest, res: Response): Promise<
   try {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
-    const { data: users, error } = await supabase
+    const { data: users, error } = await supabaseAdmin
       .from('users')
       .select('id, email, full_name, role, last_seen_at')
       .gte('last_seen_at', fiveMinutesAgo)
@@ -100,7 +100,7 @@ router.post('/heartbeat', async (req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('users')
       .update({ last_seen_at: new Date().toISOString() })
       .eq('id', req.user.id);

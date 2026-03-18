@@ -120,8 +120,8 @@ async function startServer() {
   try {
     // Test database connection
     logger.info('Testing database connection...');
-    const { supabase } = require('./config/database.config');
-    const { error } = await supabase.from('users').select('id').limit(1);
+    const { supabaseAdmin: dbCheck } = require('./config/database.config');
+    const { error } = await dbCheck.from('users').select('id').limit(1);
     if (error) {
       logger.warn('Database connection test failed', { error: error.message });
     } else {

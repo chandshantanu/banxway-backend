@@ -122,7 +122,7 @@ class RateCardRepository {
    * Find all rate cards with optional filters
    */
   async findAll(filters?: RateCardFilters): Promise<RateCardWithShipper[]> {
-    let query = supabase
+    let query = supabaseAdminAdmin
       .from('rate_cards')
       .select(`
         *,
@@ -193,7 +193,7 @@ class RateCardRepository {
    * Find rate card by ID
    */
   async findById(id: string): Promise<RateCardWithShipper | null> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdminAdmin
       .from('rate_cards')
       .select(`
         *,
@@ -235,7 +235,7 @@ class RateCardRepository {
   async findActive(): Promise<RateCardWithShipper[]> {
     const today = new Date().toISOString().split('T')[0];
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdminAdmin
       .from('rate_cards')
       .select(`
         *,
@@ -277,7 +277,7 @@ class RateCardRepository {
   ): Promise<RateCardWithShipper[]> {
     const validDate = date || new Date().toISOString().split('T')[0];
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdminAdmin
       .from('rate_cards')
       .select(`
         *,
@@ -323,7 +323,7 @@ class RateCardRepository {
     const futureDate = new Date();
     futureDate.setDate(today.getDate() + days);
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdminAdmin
       .from('rate_cards')
       .select(`
         *,
@@ -364,7 +364,7 @@ class RateCardRepository {
     const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     const rate_card_number = `RC-${data.rate_type.substring(0, 3)}-${dateStr}-${randomSuffix}`;
 
-    const { data: result, error } = await supabase
+    const { data: result, error } = await supabaseAdminAdmin
       .from('rate_cards')
       .insert({
         ...data,
@@ -400,7 +400,7 @@ class RateCardRepository {
    * Update rate card
    */
   async update(id: string, updates: UpdateRateCardRequest): Promise<RateCardWithShipper> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdminAdmin
       .from('rate_cards')
       .update({
         ...updates,
@@ -436,7 +436,7 @@ class RateCardRepository {
    * Delete rate card (soft delete - set status to INACTIVE)
    */
   async delete(id: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await supabaseAdminAdmin
       .from('rate_cards')
       .update({ status: 'INACTIVE', updated_at: new Date().toISOString() })
       .eq('id', id);

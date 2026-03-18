@@ -1,0 +1,249 @@
+{
+  "id": "/subscriptions/7640a79e-8faa-4c15-9303-a57f229eb962/resourceGroups/banxway-platform-prod/providers/Microsoft.App/containerapps/banxway-api",
+  "identity": {
+    "type": "None"
+  },
+  "location": "Central India",
+  "name": "banxway-api",
+  "properties": {
+    "configuration": {
+      "activeRevisionsMode": "Single",
+      "dapr": null,
+      "identitySettings": [],
+      "ingress": {
+        "additionalPortMappings": null,
+        "allowInsecure": false,
+        "clientCertificateMode": null,
+        "corsPolicy": {
+          "allowCredentials": true,
+          "allowedHeaders": [
+            "*"
+          ],
+          "allowedMethods": [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "PATCH",
+            "OPTIONS"
+          ],
+          "allowedOrigins": [
+            "https://banxway.vercel.app",
+            "https://banxway-frontend.vercel.app",
+            "https://*.vercel.app",
+            "http://localhost:3000",
+            "http://localhost:3003"
+          ],
+          "exposeHeaders": null,
+          "maxAge": null
+        },
+        "customDomains": null,
+        "exposedPort": 0,
+        "external": true,
+        "fqdn": "banxway-api.ambitiousglacier-6604109c.centralindia.azurecontainerapps.io",
+        "ipSecurityRestrictions": null,
+        "stickySessions": null,
+        "targetPort": 8000,
+        "traffic": [
+          {
+            "latestRevision": true,
+            "weight": 100
+          }
+        ],
+        "transport": "Http"
+      },
+      "maxInactiveRevisions": null,
+      "registries": [
+        {
+          "identity": "",
+          "passwordSecretRef": "acr-password",
+          "server": "banxwayacr.azurecr.io",
+          "username": "banxwayacr"
+        }
+      ],
+      "runtime": null,
+      "secrets": [
+        {
+          "name": "supabase-service-role-key"
+        },
+        {
+          "name": "redis-url"
+        },
+        {
+          "name": "redis-url-new"
+        },
+        {
+          "name": "jwt-secret"
+        },
+        {
+          "name": "supabase-anon-key"
+        },
+        {
+          "name": "exotel-api-key"
+        },
+        {
+          "name": "exotel-token"
+        },
+        {
+          "name": "supabase-url"
+        },
+        {
+          "name": "acr-password"
+        },
+        {
+          "name": "config-file"
+        }
+      ],
+      "service": null
+    },
+    "customDomainVerificationId": "C501CE3383BC832A66398750B3B67D865367E9E65374AC56E3B3F786BFAD1809",
+    "delegatedIdentities": [],
+    "environmentId": "/subscriptions/7640a79e-8faa-4c15-9303-a57f229eb962/resourceGroups/banxway-platform-prod/providers/Microsoft.App/managedEnvironments/banxway-production-env",
+    "eventStreamEndpoint": "https://centralindia.azurecontainerapps.dev/subscriptions/7640a79e-8faa-4c15-9303-a57f229eb962/resourceGroups/banxway-platform-prod/containerApps/banxway-api/eventstream",
+    "latestReadyRevisionName": "banxway-api--0000042",
+    "latestRevisionFqdn": "banxway-api--0000042.ambitiousglacier-6604109c.centralindia.azurecontainerapps.io",
+    "latestRevisionName": "banxway-api--0000042",
+    "managedEnvironmentId": "/subscriptions/7640a79e-8faa-4c15-9303-a57f229eb962/resourceGroups/banxway-platform-prod/providers/Microsoft.App/managedEnvironments/banxway-production-env",
+    "outboundIpAddresses": [
+      "20.204.235.117"
+    ],
+    "provisioningState": "Succeeded",
+    "runningStatus": "Running",
+    "template": {
+      "containers": [
+        {
+          "env": [
+            {
+              "name": "REDIS_URL",
+              "secretRef": "redis-url-new"
+            },
+            {
+              "name": "SUPABASE_URL",
+              "secretRef": "supabase-url"
+            },
+            {
+              "name": "SUPABASE_ANON_KEY",
+              "secretRef": "supabase-anon-key"
+            },
+            {
+              "name": "SUPABASE_SERVICE_ROLE_KEY",
+              "secretRef": "supabase-service-role-key"
+            },
+            {
+              "name": "EXOTEL_API_KEY",
+              "secretRef": "exotel-api-key"
+            },
+            {
+              "name": "EXOTEL_TOKEN",
+              "secretRef": "exotel-token"
+            },
+            {
+              "name": "JWT_SECRET",
+              "secretRef": "jwt-secret"
+            },
+            {
+              "name": "NODE_ENV",
+              "value": "production"
+            },
+            {
+              "name": "PORT",
+              "value": "8000"
+            },
+            {
+              "name": "CONFIG_FILE_PATH",
+              "value": "/app/config/config-file"
+            },
+            {
+              "name": "CORS_ORIGIN",
+              "value": "https://banxway-frontend.vercel.app,https://banxway.vercel.app,https://www.banxwayglobal.com,http://localhost:3000,http://localhost:3003"
+            },
+            {
+              "name": "RATE_LIMIT_MAX_REQUESTS",
+              "value": "1000"
+            },
+            {
+              "name": "POLLING_RATE_LIMIT_MAX",
+              "value": "2000"
+            },
+            {
+              "name": "DEPLOY_TIMESTAMP",
+              "value": "1770274306"
+            }
+          ],
+          "image": "banxwayacr.azurecr.io/banxway-backend:latest",
+          "name": "banxway-api",
+          "probes": [
+            {
+              "failureThreshold": 3,
+              "httpGet": {
+                "path": "/api/v1/health",
+                "port": 8000
+              },
+              "initialDelaySeconds": 30,
+              "periodSeconds": 30,
+              "type": "Liveness"
+            },
+            {
+              "failureThreshold": 3,
+              "httpGet": {
+                "path": "/api/v1/health",
+                "port": 8000
+              },
+              "initialDelaySeconds": 10,
+              "periodSeconds": 10,
+              "type": "Readiness"
+            }
+          ],
+          "resources": {
+            "cpu": 0.5,
+            "ephemeralStorage": "2Gi",
+            "memory": "1Gi"
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/app/config=config-file",
+              "volumeName": "secret-volume-bekl"
+            }
+          ]
+        }
+      ],
+      "initContainers": null,
+      "revisionSuffix": "",
+      "scale": {
+        "cooldownPeriod": 300,
+        "maxReplicas": 5,
+        "minReplicas": 1,
+        "pollingInterval": 30,
+        "rules": [
+          {
+            "http": {
+              "metadata": {
+                "concurrentRequests": "50"
+              }
+            },
+            "name": "http-scaling"
+          }
+        ]
+      },
+      "serviceBinds": null,
+      "terminationGracePeriodSeconds": null,
+      "volumes": [
+        {
+          "name": "secret-volume-bekl",
+          "storageType": "Secret"
+        }
+      ]
+    },
+    "workloadProfileName": null
+  },
+  "resourceGroup": "banxway-platform-prod",
+  "systemData": {
+    "createdAt": "2026-01-24T08:38:07.8776316",
+    "createdBy": "admin@chatslytics.com",
+    "createdByType": "User",
+    "lastModifiedAt": "2026-02-05T06:51:50.3628024",
+    "lastModifiedBy": "admin@chatslytics.com",
+    "lastModifiedByType": "User"
+  },
+  "type": "Microsoft.App/containerApps"
+}

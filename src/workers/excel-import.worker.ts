@@ -323,7 +323,7 @@ class ExcelImportWorker {
       throw new Error('Full Name is required');
     }
 
-    const { data: contact, error } = await supabase
+    const { data: contact, error } = await supabaseAdmin
       .from('crm_contacts')
       .insert(data)
       .select()
@@ -416,7 +416,7 @@ class ExcelImportWorker {
    * Update job status
    */
   private async updateJobStatus(jobId: string, status: string): Promise<void> {
-    await supabase
+    await supabaseAdmin
       .from('excel_import_jobs')
       .update({
         status,
@@ -429,7 +429,7 @@ class ExcelImportWorker {
    * Update job total rows
    */
   private async updateJobTotalRows(jobId: string, totalRows: number): Promise<void> {
-    await supabase
+    await supabaseAdmin
       .from('excel_import_jobs')
       .update({ total_rows: totalRows })
       .eq('id', jobId);
@@ -445,7 +445,7 @@ class ExcelImportWorker {
     failedImports: number,
     skippedRows: number
   ): Promise<void> {
-    await supabase
+    await supabaseAdmin
       .from('excel_import_jobs')
       .update({
         processed_rows: processedRows,
@@ -476,7 +476,7 @@ class ExcelImportWorker {
     status: string,
     createdEntityIds: string[]
   ): Promise<void> {
-    await supabase
+    await supabaseAdmin
       .from('excel_import_jobs')
       .update({
         status,
@@ -490,7 +490,7 @@ class ExcelImportWorker {
    * Fail job
    */
   private async failJob(jobId: string, errorMessage: string): Promise<void> {
-    await supabase
+    await supabaseAdmin
       .from('excel_import_jobs')
       .update({
         status: 'FAILED',

@@ -137,7 +137,7 @@ export function initializeWebSocket(io: SocketIOServer): void {
 
 async function updateUserPresence(userId: string, status: string): Promise<void> {
   try {
-    await supabase
+    await supabaseAdmin
       .from('users')
       .update({
         last_seen_at: new Date().toISOString(),

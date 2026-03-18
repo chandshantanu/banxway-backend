@@ -295,7 +295,7 @@ export class MessageService {
     try {
       const { count, error } = await supabaseAdmin
         .from('communication_messages')
-        .select('*', { count: 'exact', head: true })
+        .select('*', { count: 'exact' })
         .eq('thread_id', threadId)
         .eq('direction', 'INBOUND')
         .is('read_at', null)

@@ -34,7 +34,7 @@ async function setupIntegrationsDatabase() {
         // Use raw SQL execution via Supabase
         const { error } = await supabaseAdmin.rpc('exec_sql', {
           sql_query: statement
-        }).single();
+        });
 
         if (error) {
           // If exec_sql RPC doesn't exist, try direct execution

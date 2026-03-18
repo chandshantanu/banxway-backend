@@ -1,6 +1,7 @@
 import { Queue, Worker, QueueEvents } from 'bullmq';
 import Redis from 'ioredis';
 import { loadConfig } from './config-loader';
+import { logger } from '../utils/logger';
 
 // Lazy initialization to ensure config is loaded
 let _redisConnection: Redis | null = null;
@@ -13,32 +14,38 @@ function getRedisConfig() {
     return { url: _redisUrl, maskedUrl: _maskedUrl! };
   }
 
-  console.error('[REDIS-CONFIG] ==========================================');
-  console.error('[REDIS-CONFIG] Loading Redis configuration...');
+  logger.info('Loading Redis configuration...');
 
   try {
     // Try config file first
     const config = loadConfig();
     _redisUrl = config.redis.url;
-    console.error(`[REDIS-CONFIG] ✅ Redis URL loaded from config file`);
+    logger.info('Redis URL loaded from config file');
   } catch (error: any) {
-    console.error(`[REDIS-CONFIG] ⚠️ Config file not available: ${error.message}`);
+    logger.warn(`Config file not available: ${error.message}`);
 
-    // TEMPORARY HARDCODE - Replace with proper env var/config management
-    // This is a workaround for Azure Container Apps env var injection issues
-    _redisUrl = process.env.REDIS_URL || `rediss://:${process.env.REDIS_PASSWORD || process.env.AZURE_REDIS_PASSWORD}@banxway-redis.redis.cache.windows.net:6380`;
+    // Require explicit REDIS_URL env var — no hardcoded fallbacks
+    _redisUrl = process.env.REDIS_URL;
 
-    console.error('[REDIS-CONFIG] 📋 Using hardcoded fallback (temporary workaround)');
+    if (!_redisUrl) {
+      const password = process.env.REDIS_PASSWORD || process.env.AZURE_REDIS_PASSWORD;
+      const host = process.env.REDIS_HOST;
+      const port = process.env.REDIS_PORT || '6380';
+
+      if (password && host) {
+        _redisUrl = `rediss://:${password}@${host}:${port}`;
+        logger.info('Redis URL constructed from REDIS_HOST and REDIS_PASSWORD env vars');
+      } else {
+        throw new Error('REDIS_URL not set and REDIS_HOST/REDIS_PASSWORD not available. Set REDIS_URL env var.');
+      }
+    } else {
+      logger.info('Redis URL loaded from REDIS_URL env var');
+    }
   }
-
-  console.error(`[REDIS-CONFIG] URL length: ${_redisUrl.length}`);
-  console.error(`[REDIS-CONFIG] URL preview: ${_redisUrl.substring(0, 40)}...`);
 
   // Mask password in URL for logging
   _maskedUrl = _redisUrl.replace(/:[^:@]+@/, ':****@');
-
-  console.error(`[REDIS-CONFIG] Final URL (masked): ${_maskedUrl}`);
-  console.error('[REDIS-CONFIG] ==========================================');
+  logger.info(`Redis URL (masked): ${_maskedUrl}`);
 
   return { url: _redisUrl, maskedUrl: _maskedUrl };
 }
@@ -61,7 +68,7 @@ function createRedisConnection(): Redis {
   // If using Azure Redis with TLS (rediss://)
   if (url.startsWith('rediss://')) {
     redisOptions.tls = {
-      rejectUnauthorized: false, // Accept Azure's self-signed cert
+      rejectUnauthorized: process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== 'false',
     };
   }
 

@@ -1,4 +1,5 @@
 import cors from 'cors';
+import { logger } from '../utils/logger';
 
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3003')
   .split(',')
@@ -20,23 +21,39 @@ const isOriginAllowed = (origin: string): boolean => {
   });
 };
 
+// Check if origin is a localhost address (for development)
+const isLocalhostOrigin = (origin: string): boolean => {
+  try {
+    const url = new URL(origin);
+    return url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+};
+
 export const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
+    // Allow requests with no origin (same-origin requests, server-to-server, mobile apps)
+    // In production, browsers always send Origin for cross-origin requests,
+    // so no-origin requests are either same-origin or non-browser clients
     if (!origin) {
       return callback(null, true);
     }
 
-    // Allow in development mode
+    // In development, allow only localhost origins
     if (process.env.NODE_ENV === 'development') {
-      return callback(null, true);
+      if (isLocalhostOrigin(origin) || isOriginAllowed(origin)) {
+        return callback(null, true);
+      }
+      logger.warn(`CORS: Blocked non-localhost origin in development: ${origin}`);
+      return callback(new Error('Not allowed by CORS'));
     }
 
-    // Check against allowed origins
+    // In production, check against allowed origins
     if (isOriginAllowed(origin)) {
       callback(null, true);
     } else {
-      console.warn(`CORS: Blocked origin ${origin}. Allowed: ${allowedOrigins.join(', ')}`);
+      logger.warn(`CORS: Blocked origin ${origin}. Allowed: ${allowedOrigins.join(', ')}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -46,3 +63,11 @@ export const corsOptions: cors.CorsOptions = {
   exposedHeaders: ['Content-Range', 'X-Total-Count'],
   maxAge: 86400, // 24 hours
 };
+
+// Export allowed origins for WebSocket CORS configuration
+export function getWebSocketCorsOrigins(): string[] {
+  if (process.env.NODE_ENV === 'development') {
+    return ['http://localhost:3003', 'http://localhost:3000', ...allowedOrigins];
+  }
+  return allowedOrigins;
+}

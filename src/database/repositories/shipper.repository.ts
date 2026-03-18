@@ -78,7 +78,7 @@ class ShipperRepository {
    * Find all shippers with optional filters
    */
   async findAll(filters?: ShipperFilters): Promise<Shipper[]> {
-    let query = supabase
+    let query = supabaseAdmin
       .from('shippers')
       .select('*')
       .order('shipper_name', { ascending: true });
@@ -117,7 +117,7 @@ class ShipperRepository {
    * Find shipper by ID
    */
   async findById(id: string): Promise<Shipper | null> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('shippers')
       .select('*')
       .eq('id', id)
@@ -142,7 +142,7 @@ class ShipperRepository {
    * Find shipper by code
    */
   async findByCode(code: string): Promise<Shipper | null> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('shippers')
       .select('*')
       .eq('shipper_code', code)
@@ -167,7 +167,7 @@ class ShipperRepository {
    * Create new shipper
    */
   async create(data: CreateShipperRequest): Promise<Shipper> {
-    const { data: result, error } = await supabase
+    const { data: result, error } = await supabaseAdmin
       .from('shippers')
       .insert({
         ...data,
@@ -189,7 +189,7 @@ class ShipperRepository {
    * Update shipper
    */
   async update(id: string, updates: UpdateShipperRequest): Promise<Shipper> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('shippers')
       .update(updates)
       .eq('id', id)
@@ -209,7 +209,7 @@ class ShipperRepository {
    * Delete shipper (soft delete - set is_active to false)
    */
   async delete(id: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('shippers')
       .update({ is_active: false })
       .eq('id', id);

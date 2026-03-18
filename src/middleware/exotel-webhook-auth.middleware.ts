@@ -7,10 +7,14 @@ import { logger } from '../utils/logger';
  *
  * Exotel signs webhooks with HMAC-SHA1 using the auth token
  * Signature is sent in X-Exotel-Signature header
+ *
+ * Verification is ON by default. It can only be skipped when BOTH:
+ * - SKIP_WEBHOOK_VERIFICATION=true
+ * - NODE_ENV=development
  */
 export function verifyExotelWebhook(req: Request, res: Response, next: NextFunction) {
-  // Skip verification in development
-  if (process.env.NODE_ENV === 'development' || process.env.ENABLE_WEBHOOK_SIGNATURE_VERIFICATION !== 'true') {
+  // Only skip verification when explicitly opted out AND in development
+  if (process.env.SKIP_WEBHOOK_VERIFICATION === 'true' && process.env.NODE_ENV === 'development') {
     return next();
   }
 
@@ -49,13 +53,15 @@ export function verifyExotelWebhook(req: Request, res: Response, next: NextFunct
       .update(data)
       .digest('base64');
 
-    // Verify signature
-    if (signature !== expectedSignature) {
+    // Use timing-safe comparison to prevent timing attacks
+    const signatureBuffer = Buffer.from(signature, 'utf8');
+    const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
+
+    if (signatureBuffer.length !== expectedBuffer.length ||
+        !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)) {
       logger.warn('Webhook signature verification failed', {
         path: req.path,
         ip: req.ip,
-        received: signature,
-        expected: expectedSignature,
       });
       return res.status(401).json({ error: 'Invalid signature' });
     }

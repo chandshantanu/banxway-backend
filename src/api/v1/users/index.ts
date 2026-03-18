@@ -159,7 +159,7 @@ router.post('/me/change-password', async (req: AuthenticatedRequest, res: Respon
     }
 
     // Verify current password by attempting to sign in
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { error: signInError } = await supabaseAuth.auth.signInWithPassword({
       email: userData.email,
       password: currentPassword,
     });

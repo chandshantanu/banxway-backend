@@ -1311,3 +1311,21 @@ docker build --platform linux/amd64 -t banxway-backend:latest .
 **Last Updated:** 2026-01-25
 **Project:** Banxway Backend API
 **Maintained By:** Development Team
+
+---
+
+## 🗂️ Obsidian Knowledge Base
+
+For business context, infrastructure references, and operational details:
+
+**Vault**: `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/agentic_development/agentic_development/`
+**Banxway private context**: `02_Projects/active/banxway.md`
+**Credentials map**: `05_Resources/credentials-map.md` (where all secrets live — no actual values)
+
+### Key operational references (in vault or local CREDENTIALS.md)
+- Supabase project: `thaobumtmokgayljvlgn.supabase.co` (ap-south-1)
+- Azure Container Apps: `banxway-api` in `banxway-platform-prod` (Central India)
+- ACR: `banxwayacr.azurecr.io`
+- Exotel: account `chatslytics1`, number `01141169368`
+- Full credentials: `~/code/banxway/platform/CREDENTIALS.md` (gitignored, local only)
+- Platform docs index: `~/code/banxway/platform/DOCUMENTATION_INDEX.md`
