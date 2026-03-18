@@ -88,7 +88,7 @@ class CrmSyncService {
 
     try {
       // Fetch user from Supabase Auth
-      const { data: { user }, error } = await supabaseAuth?.auth.admin.getUserById(userId);
+      const { data: { user }, error } = await supabaseAdminAuth?.auth.admin.getUserById(userId);
 
       if (error || !user) {
         throw new Error(`User not found: ${userId}`);
@@ -114,7 +114,7 @@ class CrmSyncService {
       let espoUserId: string;
 
       // Check if user already exists in EspoCRM
-      const { data: users } = await supabaseAdmin
+      const { data: users } = await supabaseAdminAdmin
         .from('users')
         .select('espocrm_user_id')
         .eq('id', userId)
@@ -132,7 +132,7 @@ class CrmSyncService {
         espoUserId = response.data.id;
 
         // Store EspoCRM user ID in Banxway
-        await supabase
+        await supabaseAdmin
           .from('users')
           .update({ espocrm_user_id: espoUserId })
           .eq('id', userId);
@@ -266,7 +266,7 @@ class CrmSyncService {
 
     try {
       // Fetch contact
-      const { data: contact, error } = await supabaseAdmin
+      const { data: contact, error } = await supabaseAdminAdmin
         .from('crm_contacts')
         .select('*')
         .eq('id', contactId)
@@ -307,7 +307,7 @@ class CrmSyncService {
         espoContactId = response.data.id;
 
         // Store EspoCRM ID
-        await supabase
+        await supabaseAdmin
           .from('crm_contacts')
           .update({ espocrm_contact_id: espoContactId })
           .eq('id', contactId);
@@ -428,7 +428,7 @@ class CrmSyncService {
       logger.info('Received EspoCRM account webhook', { espoAccountId });
 
       // Find customer by EspoCRM ID
-      const { data: customers, error } = await supabaseAdmin
+      const { data: customers, error } = await supabaseAdminAdmin
         .from('crm_customers')
         .select('*')
         .eq('espocrm_account_id', espoAccountId)
@@ -516,7 +516,7 @@ class CrmSyncService {
    */
   private async logSync(log: SyncLog): Promise<void> {
     try {
-      await supabaseAdmin.from('crm_sync_logs').insert(log);
+      await supabaseAdminAdmin.from('crm_sync_logs').insert(log);
     } catch (error: any) {
       logger.error('Failed to log CRM sync', { error: error.message });
     }
@@ -532,7 +532,7 @@ class CrmSyncService {
     lastSync: string | null;
   }> {
     try {
-      const { data: logs, error } = await supabaseAdmin
+      const { data: logs, error } = await supabaseAdminAdmin
         .from('crm_sync_logs')
         .select('status, synced_at')
         .order('synced_at', { ascending: false });
@@ -540,10 +540,10 @@ class CrmSyncService {
       if (error) throw error;
 
       const stats = {
-        total: data?.length || 0,
-        success: data?.filter((log) => log.status === 'success').length || 0,
-        failed: data?.filter((log) => log.status === 'failed').length || 0,
-        lastSync: data && data.length > 0 ? data[0].synced_at : null,
+        total: logs?.length || 0,
+        success: logs?.filter((log: any) => log.status === 'success').length || 0,
+        failed: logs?.filter((log: any) => log.status === 'failed').length || 0,
+        lastSync: logs && logs.length > 0 ? logs[0].synced_at : null,
       };
 
       return stats;

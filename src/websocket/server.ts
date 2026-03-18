@@ -1,5 +1,5 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { supabaseAuth as supabase } from '../config/database.config';
+import { supabaseAuth as supabase, supabaseAdmin } from '../config/database.config';
 import { logger } from '../utils/logger';
 
 interface AuthenticatedSocket extends Socket {
