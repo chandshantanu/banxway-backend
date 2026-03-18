@@ -4,7 +4,7 @@
  * Handles database operations for rate cards (pre-negotiated rates)
  */
 
-import { supabase } from '../../config/database.config';
+import { supabaseAdmin } from '../../config/database.config';
 import { logger } from '../../utils/logger';
 
 export interface RateCard {

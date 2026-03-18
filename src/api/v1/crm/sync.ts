@@ -15,7 +15,7 @@
 
 import { Router, type Response } from 'express';
 import { authenticateRequest, type AuthenticatedRequest } from '../../../middleware/auth.middleware';
-import { supabase } from '../../../config/database.config';
+import { supabaseAdmin as supabase } from '../../../config/database.config';
 import { logger } from '../../../utils/logger';
 import { crmSyncService } from '../../../services/crm-sync.service';
 

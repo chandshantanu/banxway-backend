@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabase, supabaseAdmin } from '../config/database.config';
+import { supabaseAuth, supabaseAdmin } from '../config/database.config';
 import { UnauthorizedError, ForbiddenError } from '../types';
 import { logger } from '../utils/logger';
 import { Permission, hasPermission, UserRole } from '../utils/permissions';
@@ -47,8 +47,11 @@ export async function authenticateRequest(
       tokenLength: token.length,
     });
 
-    // Verify token with Supabase using admin client (can validate RS256 tokens)
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    // Verify token with Supabase Auth (kept for auth only)
+    if (!supabaseAuth) {
+      throw new UnauthorizedError('Auth service not configured');
+    }
+    const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
 
     if (error || !user) {
       logger.warn('Supabase token validation failed', {
@@ -68,8 +71,8 @@ export async function authenticateRequest(
       userEmail: user.email,
     });
 
-    // Fetch user details with role
-    const { data: userDetails, error: userError } = await supabase
+    // Fetch user details with role (from PostgreSQL directly)
+    const { data: userDetails, error: userError } = await supabaseAdmin
       .from('users')
       .select('*')
       .eq('id', user.id)
@@ -107,17 +110,13 @@ export async function authenticateRequest(
       path: req.path,
     });
 
-    // Update last_seen_at
-    (async () => {
-      try {
-        await supabase
-          .from('users')
-          .update({ last_seen_at: new Date().toISOString() })
-          .eq('id', userDetails.id);
-      } catch (err) {
-        logger.error('Failed to update last_seen_at', { error: err });
-      }
-    })();
+    // Update last_seen_at (fire-and-forget via PG)
+    supabaseAdmin
+      .from('users')
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq('id', userDetails.id)
+      .then(() => {})
+      .catch((err: any) => logger.error('Failed to update last_seen_at', { error: err }));
 
     next();
   } catch (error) {

@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { authenticateRequest, requirePermission, AuthenticatedRequest } from '../../../middleware/auth.middleware';
 import { Permission } from '../../../utils/permissions';
-import { supabase, supabaseAdmin } from '../../../config/database.config';
+import { supabaseAuth, supabaseAdmin } from '../../../config/database.config';
 import { logger } from '../../../utils/logger';
 import presenceRouter from './presence';
 
@@ -174,7 +174,7 @@ router.post('/me/change-password', async (req: AuthenticatedRequest, res: Respon
     }
 
     // Update password using Supabase Admin
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+    const { error: updateError } = await supabaseAuth?.auth.admin.updateUserById(
       userId,
       { password: newPassword }
     );
@@ -349,7 +349,7 @@ router.post('/', requirePermission(Permission.CREATE_USERS), async (req: Authent
 
     // Create user in Supabase Auth (this will trigger the user creation in the users table via trigger)
     // For now, we'll create a placeholder that gets linked when the user signs up
-    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authUser, error: authError } = await supabaseAuth?.auth.admin.createUser({
       email,
       email_confirm: true,
       user_metadata: {
@@ -381,7 +381,7 @@ router.post('/', requirePermission(Permission.CREATE_USERS), async (req: Authent
     if (error) {
       logger.error('Error creating user record', { error });
       // Rollback auth user
-      await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
+      await supabaseAuth?.auth.admin.deleteUser(authUser.user.id);
       res.status(500).json({ success: false, error: 'Failed to create user' });
       return;
     }

@@ -26,7 +26,7 @@
  */
 
 import axios, { AxiosInstance } from 'axios';
-import { supabase } from '../config/database.config';
+import { supabaseAdmin, supabaseAuth } from '../config/database.config';
 import { logger } from '../utils/logger';
 import crmCustomerRepository from '../database/repositories/crm-customer.repository';
 import quotationRepository from '../database/repositories/quotation.repository';
@@ -88,7 +88,7 @@ class CrmSyncService {
 
     try {
       // Fetch user from Supabase Auth
-      const { data: { user }, error } = await supabase.auth.admin.getUserById(userId);
+      const { data: { user }, error } = await supabaseAuth?.auth.admin.getUserById(userId);
 
       if (error || !user) {
         throw new Error(`User not found: ${userId}`);
@@ -516,7 +516,7 @@ class CrmSyncService {
    */
   private async logSync(log: SyncLog): Promise<void> {
     try {
-      await supabase.from('crm_sync_logs').insert(log);
+      await supabaseAdmin.from('crm_sync_logs').insert(log);
     } catch (error: any) {
       logger.error('Failed to log CRM sync', { error: error.message });
     }

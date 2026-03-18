@@ -18,7 +18,7 @@
 import express, { Request, Response } from 'express';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
-import { supabase } from '../../../config/database.config';
+import { supabaseAdmin as supabase } from '../../../config/database.config';
 import { authenticateRequest, type AuthenticatedRequest } from '../../../middleware/auth.middleware';
 import { logger } from '../../../utils/logger';
 import { uploadFileToStorage } from '../../../lib/storage';

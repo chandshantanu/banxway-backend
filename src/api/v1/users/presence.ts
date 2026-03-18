@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { supabase } from '../../../config/database.config';
+import { supabaseAdmin as supabase } from '../../../config/database.config';
 import { AuthenticatedRequest, authenticateRequest } from '../../../middleware/auth.middleware';
 import { pollingRateLimiter } from '../../../middleware/rate-limit.middleware';
 import { logger } from '../../../utils/logger';

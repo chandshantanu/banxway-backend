@@ -18,7 +18,7 @@
 import { Worker, Job, Queue } from 'bullmq';
 // @ts-ignore - xlsx will be installed
 import * as XLSX from 'xlsx';
-import { supabase } from '../config/database.config';
+import { supabaseAdmin } from '../config/database.config';
 import { logger } from '../utils/logger';
 import { downloadFileFromStorage } from '../lib/storage';
 import crmCustomerRepository from '../database/repositories/crm-customer.repository';
@@ -465,7 +465,7 @@ class ExcelImportWorker {
       ...error,
     }));
 
-    await supabase.from('import_row_errors').insert(records);
+    await supabaseAdmin.from('import_row_errors').insert(records);
   }
 
   /**
