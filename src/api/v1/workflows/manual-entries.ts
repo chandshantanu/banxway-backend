@@ -147,9 +147,7 @@ router.get('/manual-entries/my-pending', async (req: AuthenticatedRequest, res: 
         )
       `)
             .eq('status', 'PENDING')
-            .or(`assigned_to.eq.${userId},assigned_role.eq.${userRole}`, {
-                foreignTable: 'workflow_instances',
-            })
+            .or(`assigned_to.eq.${userId},assigned_role.eq.${userRole}`)
             .order('created_at', { ascending: true });
 
         if (error) throw error;

@@ -89,7 +89,7 @@ class NotificationRepository {
   async getUnreadCount(userId: string): Promise<number> {
     const { count, error } = await supabaseAdmin
       .from('notifications')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'exact' })
       .eq('user_id', userId)
       .is('read_at', null);
 

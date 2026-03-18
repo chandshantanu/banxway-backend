@@ -439,25 +439,25 @@ router.get('/stats/summary', requirePermission(Permission.VIEW_THREADS), async (
     // Get pending shipments count
     const { count: pendingShipments } = await supabaseAdmin
       .from('shipments')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'exact' })
       .in('status', ['DRAFT', 'PENDING', 'EXCEPTION']);
 
     // Get pending threads count
     const { count: pendingThreads } = await supabaseAdmin
       .from('communication_threads')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'exact' })
       .or('status.eq.NEW,priority.in.(HIGH,URGENT,CRITICAL),sla_status.eq.AT_RISK');
 
     // Get pending actions count
     const { count: pendingActions } = await supabaseAdmin
       .from('communication_actions')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'exact' })
       .in('status', ['PENDING', 'IN_PROGRESS']);
 
     // Get high priority count
     const { count: highPriorityThreads } = await supabaseAdmin
       .from('communication_threads')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'exact' })
       .in('priority', ['HIGH', 'URGENT', 'CRITICAL'])
       .in('status', ['NEW', 'IN_PROGRESS']);
 

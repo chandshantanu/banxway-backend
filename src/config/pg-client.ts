@@ -28,7 +28,7 @@ pool.on('error', (err) => {
 });
 
 // Types
-interface QueryResult<T = any> {
+export interface QueryResult<T = any> {
   data: T | null;
   error: PgError | null;
   count?: number | null;
@@ -42,13 +42,13 @@ interface PgError {
 
 type FilterOp = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'IN' | 'IS' | 'LIKE' | 'ILIKE' | 'CONTAINS' | 'OVERLAPS';
 
-interface WhereClause {
+export interface WhereClause {
   column: string;
   op: FilterOp;
   value: any;
 }
 
-interface OrderClause {
+export interface OrderClause {
   column: string;
   ascending: boolean;
   nullsFirst?: boolean;
