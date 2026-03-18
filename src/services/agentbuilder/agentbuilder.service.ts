@@ -58,7 +58,7 @@ export class AgentBuilderService {
       throw new Error(`AgentBuilder API error (${response.status}): ${message}`);
     }
 
-    return response.json();
+    return response.json() as Promise<T>;
   }
 
   /**

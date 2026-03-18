@@ -1,30 +1,36 @@
 import { Router, Request, Response } from 'express';
 import { logger } from '../../../utils/logger';
+import { queueAgentResult } from '../../../workers/agent-result.worker';
 
 const router = Router();
 
 /**
  * Agent Webhook Receivers
- * Endpoints for AgentBuilder agents to call back into Banxway
- * These are called by deployed agents when they complete processing
+ * Endpoints for AgentBuilder agents to call back into Banxway.
+ * Each handler validates the payload, queues async processing via BullMQ,
+ * and immediately returns 200 to the agent (fire-and-forget pattern).
  */
 
 /**
  * POST /api/v1/agent-webhooks/ingestion-complete
- * Called when an ingestion agent finishes processing a message
+ * Called by L1 ingestion agents (email/WhatsApp/phone) when they finish processing a raw message.
  */
 router.post('/ingestion-complete', async (req: Request, res: Response) => {
   try {
-    const { agentId, channel, messageId, data, metadata } = req.body;
+    const { agentId, channel, messageId, threadId, data, metadata } = req.body;
 
-    logger.info('Ingestion complete webhook received', {
+    if (!agentId || !threadId) {
+      return res.status(400).json({ success: false, error: 'agentId and threadId are required' });
+    }
+
+    logger.info('Ingestion complete webhook received', { agentId, channel, threadId, messageId });
+
+    await queueAgentResult({
+      resultType: 'ingestion_complete',
       agentId,
-      channel,
-      messageId,
+      entityId: threadId,
+      payload: { channel, messageId, threadId, rawContent: data?.content, metadata },
     });
-
-    // TODO: Process the ingested data - create/update communication thread
-    // Example: await communicationService.processIngestion(data);
 
     res.json({ success: true, received: true });
   } catch (error) {
@@ -35,20 +41,26 @@ router.post('/ingestion-complete', async (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/agent-webhooks/processing-complete
- * Called when a processing agent (parser, NLP, intent) completes
+ * Called by L2 processing agents (parser, NLP extractor, intent classifier) when done.
  */
 router.post('/processing-complete', async (req: Request, res: Response) => {
   try {
-    const { agentId, messageId, extractedData, confidence, metadata } = req.body;
+    const { agentId, messageId, intent, entities, confidence, hasDocuments, documentUrls, metadata } = req.body;
+
+    if (!agentId || !messageId) {
+      return res.status(400).json({ success: false, error: 'agentId and messageId are required' });
+    }
 
     logger.info('Processing complete webhook received', {
-      agentId,
-      messageId,
-      confidence,
+      agentId, messageId, intent, confidence,
     });
 
-    // TODO: Update the communication/shipment with extracted data
-    // Example: await shipmentService.updateExtractedData(messageId, extractedData);
+    await queueAgentResult({
+      resultType: 'processing_complete',
+      agentId,
+      entityId: messageId,
+      payload: { intent, entities, confidence, hasDocuments, documentUrls, metadata },
+    });
 
     res.json({ success: true, received: true });
   } catch (error) {
@@ -59,21 +71,27 @@ router.post('/processing-complete', async (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/agent-webhooks/extraction-complete
- * Called when a document extraction agent completes
+ * Called by L3 document agents (PDF/Excel/Word extractor) when extraction is done.
  */
 router.post('/extraction-complete', async (req: Request, res: Response) => {
   try {
-    const { agentId, documentId, documentType, extractedFields, confidence, metadata } = req.body;
+    const { agentId, documentId, documentType, threadId, extractedFields, confidence, metadata } = req.body;
+
+    if (!agentId || !documentId) {
+      return res.status(400).json({ success: false, error: 'agentId and documentId are required' });
+    }
 
     logger.info('Document extraction complete webhook received', {
-      agentId,
-      documentId,
-      documentType,
+      agentId, documentId, documentType,
       fieldCount: extractedFields ? Object.keys(extractedFields).length : 0,
     });
 
-    // TODO: Store extracted document data
-    // Example: await documentService.storeExtraction(documentId, extractedFields);
+    await queueAgentResult({
+      resultType: 'extraction_complete',
+      agentId,
+      entityId: documentId,
+      payload: { documentType, extractedFields, confidence, threadId, metadata },
+    });
 
     res.json({ success: true, received: true });
   } catch (error) {
@@ -83,22 +101,55 @@ router.post('/extraction-complete', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/v1/agent-webhooks/business-result
+ * Called by L4 business agents (shipment request, rate quote, workflow orchestration).
+ */
+router.post('/business-result', async (req: Request, res: Response) => {
+  try {
+    const { agentId, resultType, entityId, threadId, shipmentData, quoteData, metadata } = req.body;
+
+    if (!agentId || !entityId) {
+      return res.status(400).json({ success: false, error: 'agentId and entityId are required' });
+    }
+
+    logger.info('Business result webhook received', { agentId, resultType, entityId });
+
+    await queueAgentResult({
+      resultType: 'business_result',
+      agentId,
+      entityId,
+      payload: { resultType, threadId, shipmentData, quoteData, metadata },
+    });
+
+    res.json({ success: true, received: true });
+  } catch (error) {
+    logger.error('Business result webhook failed', { error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Webhook processing failed' });
+  }
+});
+
+/**
  * POST /api/v1/agent-webhooks/validation-required
- * Called when human review is needed for a shipment request
+ * Called by L5 human validation agent when human review is needed for a shipment request.
  */
 router.post('/validation-required', async (req: Request, res: Response) => {
   try {
     const { agentId, shipmentRequestId, priority, reason, data, metadata } = req.body;
 
+    if (!agentId || !shipmentRequestId) {
+      return res.status(400).json({ success: false, error: 'agentId and shipmentRequestId are required' });
+    }
+
     logger.info('Validation required webhook received', {
-      agentId,
-      shipmentRequestId,
-      priority,
-      reason,
+      agentId, shipmentRequestId, priority, reason,
     });
 
-    // TODO: Create validation queue item
-    // Example: await queueService.addValidationItem({ shipmentRequestId, priority, data });
+    await queueAgentResult({
+      resultType: 'validation_required',
+      agentId,
+      entityId: shipmentRequestId,
+      payload: { priority, reason, validationData: data, metadata },
+    });
 
     res.json({ success: true, received: true });
   } catch (error) {
@@ -109,21 +160,30 @@ router.post('/validation-required', async (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/agent-webhooks/validation-complete
- * Called when human or client validation is done
+ * Called when human or client validation is completed.
  */
 router.post('/validation-complete', async (req: Request, res: Response) => {
   try {
-    const { agentId, shipmentRequestId, decision, validatedBy, validationType, metadata } = req.body;
+    const { agentId, shipmentRequestId, decision, validatedBy, validationType, notes, metadata } = req.body;
+
+    if (!agentId || !shipmentRequestId || !decision) {
+      return res.status(400).json({ success: false, error: 'agentId, shipmentRequestId, and decision are required' });
+    }
+
+    if (!['approved', 'rejected', 'revision_needed'].includes(decision)) {
+      return res.status(400).json({ success: false, error: 'decision must be approved, rejected, or revision_needed' });
+    }
 
     logger.info('Validation complete webhook received', {
-      agentId,
-      shipmentRequestId,
-      decision,
-      validationType,
+      agentId, shipmentRequestId, decision, validationType,
     });
 
-    // TODO: Update shipment request state based on validation result
-    // Example: await shipmentService.applyValidation(shipmentRequestId, decision);
+    await queueAgentResult({
+      resultType: 'validation_complete',
+      agentId,
+      entityId: shipmentRequestId,
+      payload: { decision, validatedBy, validationType, notes, metadata },
+    });
 
     res.json({ success: true, received: true });
   } catch (error) {

@@ -8,7 +8,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { createServer } from 'http';
 import path from 'path';
 
-import { corsOptions } from './middleware/cors.middleware';
+import { corsOptions, getWebSocketCorsOrigins } from './middleware/cors.middleware';
 import { rateLimiter } from './middleware/rate-limit.middleware';
 import { requestLogger } from './middleware/logger.middleware';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware';
@@ -30,8 +30,16 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Security middleware
 app.use(helmet({
-  contentSecurityPolicy: false, // Disable for development
-  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: NODE_ENV === 'production' ? {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(o => o.trim()) : [])],
+    }
+  } : false,
+  crossOriginEmbedderPolicy: NODE_ENV === 'production',
 }));
 
 // CORS
@@ -90,14 +98,9 @@ app.use(errorHandler);
 // WEBSOCKET SETUP
 // =====================================================
 
-// Parse CORS_ORIGIN (can be comma-separated list)
-const corsOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
-  : ['http://localhost:3003', 'http://localhost:3000'];
-
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: corsOrigins,
+    origin: getWebSocketCorsOrigins(),
     credentials: true,
   },
   transports: ['websocket', 'polling'],
@@ -190,6 +193,24 @@ async function startServer() {
       require('./workers/email-poller.worker');
       require('./workers/whatsapp-processor.worker');
       require('./workers/sla-checker.worker');
+
+      // Agent pipeline workers (Kafka consumer, document processing, agent result handler)
+      if (process.env.ENABLE_AGENT_PIPELINE !== 'false') {
+        logger.info('Starting agent pipeline workers...');
+        const { createAgentResultWorker } = require('./workers/agent-result.worker');
+        createAgentResultWorker();
+        require('./workers/document-processor.worker');
+
+        // Kafka consumer only if Kafka is configured
+        if (process.env.KAFKA_BOOTSTRAP_SERVERS) {
+          require('./workers/kafka-consumer.worker');
+          logger.info('Kafka consumer worker started');
+        } else {
+          logger.info('Kafka consumer skipped (KAFKA_BOOTSTRAP_SERVERS not set)');
+        }
+        logger.info('Agent pipeline workers started');
+      }
+
       logger.info('Background workers started');
     } else if (!redisConnected) {
       logger.info('Background workers disabled (Redis not available)');

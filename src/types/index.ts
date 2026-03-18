@@ -80,6 +80,11 @@ export interface CommunicationAction {
   execution_result?: any;
   ai_generated: boolean;
   confidence_score?: number;
+  // Human approval fields (added 2026-02-05)
+  requires_human_approval: boolean;
+  approved_by?: string;
+  approved_at?: Date;
+  approval_notes?: string;
   created_at: Date;
   updated_at: Date;
   started_at?: Date;
@@ -267,6 +272,7 @@ export enum ActionStatus {
   PENDING = 'PENDING',
   IN_PROGRESS = 'IN_PROGRESS',
   BLOCKED = 'BLOCKED',
+  AWAITING_APPROVAL = 'AWAITING_APPROVAL', // Added 2026-02-05 for human-in-the-loop
   COMPLETED = 'COMPLETED',
   FAILED = 'FAILED',
   SKIPPED = 'SKIPPED',
@@ -568,6 +574,124 @@ export class ForbiddenError extends ApiError {
     super(403, 'FORBIDDEN', message);
     this.name = 'ForbiddenError';
   }
+}
+
+// =====================================================
+// AGENTBUILDER MCP TYPES (Added 2026-02-05)
+// =====================================================
+
+/**
+ * AgentBuilder communication parsing result
+ */
+export interface AgentBuilderParseResult {
+  intent: 'quote_request' | 'booking' | 'document_upload' | 'status_inquiry' | 'complaint' | 'general' | 'unclear';
+  confidence: number;
+  entities: {
+    pol?: string; // Port of Loading
+    pod?: string; // Port of Discharge
+    commodity?: string;
+    weight?: number;
+    incoterm?: string;
+    shipmentType?: 'SEA_IMPORT' | 'AIR_IMPORT' | 'SEA_EXPORT' | 'AIR_EXPORT' | 'ODC' | 'BREAK_BULK';
+  };
+  customerInfo: {
+    name?: string;
+    company?: string;
+    email?: string;
+    phone?: string;
+    gst?: string;
+    iec?: string;
+  };
+  requiresHumanReview: boolean;
+  extractedText: string;
+  summary: string;
+}
+
+/**
+ * AgentBuilder validation result
+ */
+export interface AgentBuilderValidationResult {
+  isValid: boolean;
+  confidence: number;
+  missingFields: string[];
+  validationErrors: Record<string, string>;
+  suggestions: string[];
+}
+
+// =====================================================
+// MANUAL COMMUNICATION ENTRY TYPES (Added 2026-02-05)
+// =====================================================
+
+/**
+ * Manual phone call entry request
+ */
+export interface ManualPhoneCallRequest {
+  direction: 'INBOUND' | 'OUTBOUND';
+  caller_phone: string;
+  recipient_phone: string;
+  duration?: number; // in seconds
+  notes?: string;
+  call_time?: string; // ISO 8601 timestamp
+}
+
+/**
+ * Manual WhatsApp message entry request
+ */
+export interface ManualWhatsAppRequest {
+  direction: 'INBOUND' | 'OUTBOUND';
+  sender_phone: string;
+  recipient_phone: string;
+  message_body: string;
+  message_time?: string; // ISO 8601 timestamp
+}
+
+/**
+ * Manual email entry request
+ */
+export interface ManualEmailRequest {
+  direction: 'INBOUND' | 'OUTBOUND';
+  from_email: string;
+  to_email: string;
+  subject: string;
+  body: string;
+  email_time?: string; // ISO 8601 timestamp
+}
+
+// =====================================================
+// APPROVAL WORKFLOW TYPES (Added 2026-02-05)
+// =====================================================
+
+/**
+ * Action approval request
+ */
+export interface ApprovalRequest {
+  approval_notes?: string;
+  modified_result?: any; // Allow human to correct AI result
+}
+
+/**
+ * Action rejection request
+ */
+export interface RejectionRequest {
+  rejection_reason: string;
+}
+
+/**
+ * Action with approval details (extended)
+ */
+export interface CommunicationActionWithThread extends CommunicationAction {
+  thread?: CommunicationThread;
+}
+
+/**
+ * Approval status response
+ */
+export interface ApprovalStatusResponse {
+  action: CommunicationAction;
+  can_approve: boolean;
+  approval_required: boolean;
+  dependencies_met: boolean;
+  blocked_by: string[];
 }
 
 // Re-export workflow types
