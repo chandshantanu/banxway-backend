@@ -71,23 +71,41 @@ export class AgentBuilderService {
     }
 
     try {
-      const params = new URLSearchParams();
-      params.set('page_size', '50');
-      if (filters?.category) params.set('category', filters.category);
-      if (filters?.search) params.set('search', filters.search);
-      if (filters?.status) params.set('agent_status', filters.status);
+      // Fetch each agent individually by ID — the list endpoint returns empty
+      // but individual get_agent works reliably
+      const knownAgents = AGENTBUILDER_CONFIG.agents;
+      const agentEntries = Object.entries(knownAgents);
 
-      const result = await this.apiRequest<AgentListResponse>(
-        `/api/v1/agents?${params.toString()}`
+      const results = await Promise.allSettled(
+        agentEntries.map(async ([key, id]) => {
+          try {
+            const agent = await this.apiRequest<any>(`/api/v1/agents/${id}`);
+            return this.mapAgentToInternal(agent);
+          } catch (err) {
+            logger.debug(`Failed to fetch agent ${key} (${id})`, { error: (err as Error).message });
+            return null;
+          }
+        })
       );
 
-      // Filter to only Banxway agents by matching known IDs
-      const knownIds = Object.values(AGENTBUILDER_CONFIG.agents);
-      const banxwayAgents = result.agents.filter(
-        (agent: any) => knownIds.includes(agent.id)
-      );
+      const agents = results
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled' && r.value !== null)
+        .map(r => r.value);
 
-      return banxwayAgents.map((agent: any) => this.mapAgentToInternal(agent));
+      // Apply filters if provided
+      let filtered = agents;
+      if (filters?.status) {
+        filtered = filtered.filter((a: any) => a.status === filters.status);
+      }
+      if (filters?.search) {
+        const search = filters.search.toLowerCase();
+        filtered = filtered.filter((a: any) =>
+          a.name?.toLowerCase().includes(search) || a.description?.toLowerCase().includes(search)
+        );
+      }
+
+      logger.info(`Listed ${filtered.length}/${agentEntries.length} agents from AgentBuilder`);
+      return filtered;
     } catch (error) {
       logger.error('Failed to list agents', { error: (error as Error).message });
       return [];
