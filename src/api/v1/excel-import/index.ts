@@ -438,7 +438,7 @@ async function generateJobNumber(importType: ImportEntityType): Promise<string> 
 
   const { count } = await supabase
     .from('excel_import_jobs')
-    .select('*', { count: 'exact', head: true })
+    .select('*', { count: 'exact' })
     .eq('import_type', importType)
     .gte('created_at', startOfDay.toISOString());
 

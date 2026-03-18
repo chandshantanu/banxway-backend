@@ -13,7 +13,7 @@ router.get('/email-counts', asyncHandler(async (req: AuthenticatedRequest, res: 
     // Total messages
     const { count: totalMessages } = await supabaseAdmin
         .from('communication_messages')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact' });
 
     // Messages with external_id
     const { data: messagesWithExtId, count: emailCount } = await supabaseAdmin
@@ -40,7 +40,7 @@ router.get('/email-counts', asyncHandler(async (req: AuthenticatedRequest, res: 
     // Thread count
     const { count: threadCount } = await supabaseAdmin
         .from('communication_threads')
-        .select('*', { count: 'exact', head: true })
+        .select('*', { count: 'exact' })
         .eq('archived', false);
 
     // Channel breakdown

@@ -66,7 +66,7 @@ router.get('/health', async (req: AuthenticatedRequest, res: Response) => {
     // Get pending syncs count
     const { count: pending_syncs } = await supabase
       .from('crm_sync_logs')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'exact' })
       .eq('status', 'IN_PROGRESS');
 
     res.json({

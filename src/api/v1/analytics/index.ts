@@ -58,12 +58,12 @@ router.get('/dashboard', requirePermission(Permission.VIEW_ANALYTICS), async (re
     // Get message stats
     const { count: messageCount } = await supabaseAdmin
       .from('communication_messages')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact' });
 
     // Get customer stats
     const { count: customerCount } = await supabaseAdmin
       .from('customers')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact' });
 
     // Get user stats
     const { data: users } = await supabaseAdmin
@@ -247,34 +247,34 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
     // Get counts per channel
     const { count: emailTotal } = await supabaseAdmin
       .from('communication_messages')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'exact' })
       .eq('channel', 'EMAIL');
 
     const { count: emailUnread } = await supabaseAdmin
       .from('communication_messages')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'exact' })
       .eq('channel', 'EMAIL')
       .eq('is_read', false);
 
     const { count: whatsappTotal } = await supabaseAdmin
       .from('communication_messages')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'exact' })
       .eq('channel', 'WHATSAPP');
 
     const { count: whatsappUnread } = await supabaseAdmin
       .from('communication_messages')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'exact' })
       .eq('channel', 'WHATSAPP')
       .eq('is_read', false);
 
     const { count: phoneTotal } = await supabaseAdmin
       .from('communication_messages')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'exact' })
       .eq('channel', 'VOICE');
 
     const { count: phoneUnread } = await supabaseAdmin
       .from('communication_messages')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'exact' })
       .eq('channel', 'VOICE')
       .eq('is_read', false);
 

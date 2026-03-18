@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { authenticateRequest } from '../../../middleware/auth.middleware';
-import { supabaseAdmin } from '../../../config/database.config';
+import { supabase } from '../../../config/database.config';
 import { logger } from '../../../utils/logger';
 
 const router = Router();
@@ -32,7 +32,7 @@ router.post('/upload', authenticateRequest, upload.single('file'), async (req: R
     const bucket = 'attachments';
 
     // Upload to Supabase Storage
-    const { data, error } = await supabaseAdmin.storage.from(bucket).upload(filename, file.buffer, {
+    const { data, error } = await supabase?.storage.from(bucket).upload(filename, file.buffer, {
       contentType: file.mimetype,
       upsert: false,
     });
@@ -45,7 +45,7 @@ router.post('/upload', authenticateRequest, upload.single('file'), async (req: R
     // Get public URL
     const {
       data: { publicUrl },
-    } = supabaseAdmin.storage.from(bucket).getPublicUrl(filename);
+    } = supabase?.storage.from(bucket).getPublicUrl(filename);
 
     logger.info('File uploaded successfully', {
       filename: file.originalname,
