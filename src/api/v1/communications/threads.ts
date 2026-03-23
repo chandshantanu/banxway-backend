@@ -53,6 +53,46 @@ const threadFiltersSchema = z.object({
   dateTo: z.coerce.date().optional(),
 });
 
+/**
+ * Normalize a raw Supabase thread row into the shape the frontend expects:
+ * - `customers` (table-name join) → `customer` with `companyName` field
+ * - `users` (table-name join) → `assignedTo` with `fullName` field
+ * - `last_message_preview` populated from the join if missing
+ */
+function normalizeThread(raw: any): any {
+  const { customers, users, ...rest } = raw;
+
+  const customer = customers
+    ? {
+        id: customers.id,
+        name: customers.name,
+        companyName: customers.company || undefined,
+        email: customers.email,
+        phone: customers.phone,
+      }
+    : null;
+
+  const assignedTo = users
+    ? {
+        id: users.id,
+        fullName: users.full_name,
+        email: users.email,
+      }
+    : null;
+
+  // Provide messages array with preview so the inbox card can render content
+  const messages = rest.last_message_preview
+    ? [{ content: rest.last_message_preview, created_at: rest.last_message_at }]
+    : [];
+
+  return {
+    ...rest,
+    customer,
+    assignedTo,
+    messages,
+  };
+}
+
 // GET /api/v1/communications/threads - List threads
 router.get('/', requirePermission(Permission.VIEW_THREADS), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const pagination = validateRequest(paginationSchema, req.query);
@@ -66,7 +106,7 @@ router.get('/', requirePermission(Permission.VIEW_THREADS), asyncHandler(async (
 
   const response: ApiResponse = {
     success: true,
-    data: result.threads,
+    data: result.threads.map(normalizeThread),
     meta: {
       page: result.page,
       limit: result.limit,
@@ -132,7 +172,7 @@ router.get('/:id', requirePermission(Permission.VIEW_THREADS), asyncHandler(asyn
 
   const response: ApiResponse = {
     success: true,
-    data: thread,
+    data: normalizeThread(thread),
   };
 
   res.json(response);

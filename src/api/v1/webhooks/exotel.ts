@@ -10,6 +10,7 @@ import threadRepository from '../../../database/repositories/thread.repository';
 import { io } from '../../../index';
 import { queueTranscription } from '../../../workers/transcription.worker';
 import { verifyExotelWebhook, logWebhookRequest } from '../../../middleware/exotel-webhook-auth.middleware';
+import { publishToKafka, KAFKA_TOPICS } from '../../../config/kafka.config';
 
 const router = Router();
 
@@ -254,6 +255,21 @@ async function processCallWebhook(payload: ExotelWebhookPayload): Promise<void> 
         callStatus: payload.CallStatus,
         recordingUrl: payload.RecordingUrl,
       });
+
+      // Publish to Kafka for L1 agent pipeline
+      await publishToKafka(KAFKA_TOPICS.PHONE_RAW, {
+        messageId: message.id,
+        threadId: thread.id,
+        channel: 'VOICE',
+        direction: callRecord.direction,
+        from: payload.From,
+        to: payload.To,
+        callSid: payload.CallSid,
+        callStatus: payload.CallStatus,
+        duration: payload.CallDuration,
+        recordingUrl: payload.RecordingUrl,
+        timestamp: new Date().toISOString(),
+      }, thread.id);
     }
 
     logger.info('Call webhook processed successfully', {
@@ -331,8 +347,19 @@ async function processIncomingWhatsAppMessage(payload: ExotelWebhookPayload): Pr
       message: message.data,
     });
 
-    // Queue for AI processing (sentiment, intent, etc.)
-    // TODO: Add to AI queue
+    // Publish to Kafka for L1 agent pipeline
+    await publishToKafka(KAFKA_TOPICS.WHATSAPP_RAW, {
+      messageId: message.data.id,
+      threadId: thread.id,
+      channel: 'WHATSAPP',
+      direction: 'INBOUND',
+      from: payload.From,
+      to: payload.To,
+      content: payload.Body || '',
+      attachments: payload.MediaUrl ? [{ url: payload.MediaUrl }] : [],
+      customerId: customer.id,
+      timestamp: new Date().toISOString(),
+    }, thread.id);
 
     logger.info('Incoming WhatsApp message processed', {
       messageId: message.data.id,
@@ -566,8 +593,18 @@ async function processIncomingSMS(payload: ExotelWebhookPayload): Promise<void> 
       message: message.data,
     });
 
-    // Queue for AI processing (sentiment, intent, etc.)
-    // TODO: Add to AI queue
+    // Publish to Kafka for L1 agent pipeline
+    await publishToKafka(KAFKA_TOPICS.SMS_RAW, {
+      messageId: message.data.id,
+      threadId: thread.id,
+      channel: 'SMS',
+      direction: 'INBOUND',
+      from: payload.From,
+      to: payload.To,
+      content: payload.Body || '',
+      customerId: customer.id,
+      timestamp: new Date().toISOString(),
+    }, thread.id);
 
     logger.info('Incoming SMS processed', {
       messageId: message.data.id,

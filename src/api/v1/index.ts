@@ -25,6 +25,7 @@ import inboxRouter from './inbox';
 import threadsRouter from './communications/threads';
 import agentsRouter from './agents';
 import agentWebhooksRouter from './agent-webhooks';
+import validationRouter from './validation';
 
 const router = Router();
 
@@ -53,6 +54,7 @@ router.use('/rate-cards', rateCardsRouter);
 router.use('/shipper-quote-requests', shipperQuoteRequestsRouter);
 router.use('/agents', agentsRouter);
 router.use('/agent-webhooks', agentWebhooksRouter);
+router.use('/validation', validationRouter);
 
 // Test endpoints (development only)
 if (process.env.NODE_ENV !== 'production') {

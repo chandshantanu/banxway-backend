@@ -16,69 +16,61 @@
  */
 
 import { Consumer } from 'kafkajs';
-import { Queue } from 'bullmq';
 import { logger } from '../utils/logger';
 import {
   createConsumer,
   isKafkaEnabled,
   KAFKA_TOPICS,
 } from '../config/kafka.config';
-import { getRedisConnection, getDocumentQueue } from '../config/redis.config';
+import agentBuilderService from '../services/agentbuilder/agentbuilder.service';
+import { AGENTBUILDER_CONFIG } from '../services/agentbuilder/mcp-config';
 
-// BullMQ queues that Kafka messages get routed into
-const emailQueue = new Queue('email-processing', { connection: getRedisConnection() });
-const whatsappQueue = new Queue('whatsapp-processing', { connection: getRedisConnection() });
-const transcriptionQueue = new Queue('transcription', { connection: getRedisConnection() });
-const documentQueue = getDocumentQueue();
-
-const CONSUMER_GROUP = 'banxway-backend-ingestion';
+const CONSUMER_GROUP = 'banxway-backend-agents';
 
 let consumer: Consumer | null = null;
 
-/**
- * Route a Kafka message to the appropriate BullMQ queue
- */
-async function routeToQueue(topic: string, payload: Record<string, any>): Promise<void> {
+// Map Kafka topics to agent IDs for L1 invocation
+function getAgentIdForTopic(topic: string): string | null {
+  const agents = AGENTBUILDER_CONFIG.agents;
   switch (topic) {
     case KAFKA_TOPICS.EMAIL_RAW:
-      await emailQueue.add('process-email', payload, {
-        jobId: `kafka-email-${payload.messageId || Date.now()}`,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 2000 },
-      });
-      logger.debug('Routed email message to BullMQ', { topic });
-      break;
-
+      return agents.emailIngestion;
     case KAFKA_TOPICS.WHATSAPP_RAW:
-    case KAFKA_TOPICS.SMS_RAW:
-      await whatsappQueue.add('process-whatsapp', payload, {
-        jobId: `kafka-wa-${payload.messageId || Date.now()}`,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 2000 },
-      });
-      logger.debug('Routed WhatsApp/SMS message to BullMQ', { topic });
-      break;
-
+      return agents.whatsappIngestion;
     case KAFKA_TOPICS.PHONE_RAW:
-      await transcriptionQueue.add('transcribe', payload, {
-        jobId: `kafka-phone-${payload.messageId || Date.now()}`,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5000 },
-      });
-      logger.debug('Routed phone call to transcription queue', { topic });
-      break;
-
+      return agents.phoneCallIngestion;
+    case KAFKA_TOPICS.SMS_RAW:
+      return agents.whatsappIngestion; // SMS shares WhatsApp agent
     case KAFKA_TOPICS.DOCUMENTS_EXTRACTED:
-      await documentQueue.add('process-extracted-document', payload, {
-        jobId: `kafka-doc-${payload.documentId || Date.now()}`,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 3000 },
-      });
-      logger.debug('Routed document extraction result to BullMQ', { topic });
-      break;
-
+      return agents.shipmentRequest; // Doc results go to business layer
     default:
-      logger.warn('Received Kafka message for unhandled topic', { topic });
+      return null;
+  }
+}
+
+/**
+ * Route a Kafka message to the appropriate AgentBuilder agent
+ */
+async function routeToAgent(topic: string, payload: Record<string, any>): Promise<void> {
+  const agentId = getAgentIdForTopic(topic);
+  if (!agentId) {
+    logger.warn('No agent mapped for Kafka topic', { topic });
+    return;
+  }
+
+  try {
+    await agentBuilderService.executeAgent(agentId, {
+      source: topic,
+      ...payload,
+      callbackUrl: `${process.env.EXOTEL_WEBHOOK_BASE_URL || 'https://banxway-api.ambitiousglacier-6604109c.centralindia.azurecontainerapps.io'}/api/v1/agent-webhooks/ingestion-complete`,
+    });
+    logger.info('Agent invoked via Kafka message', { topic, agentId, messageId: payload.messageId });
+  } catch (error) {
+    logger.error('Failed to invoke agent from Kafka', {
+      topic,
+      agentId,
+      error: (error as Error).message,
+    });
   }
 }
 
@@ -123,9 +115,9 @@ export async function startKafkaConsumer(): Promise<void> {
       }
 
       try {
-        await routeToQueue(topic, payload);
+        await routeToAgent(topic, payload);
       } catch (error) {
-        logger.error('Failed to route Kafka message to BullMQ', {
+        logger.error('Failed to route Kafka message to agent', {
           topic,
           partition,
           error: (error as Error).message,
@@ -135,7 +127,7 @@ export async function startKafkaConsumer(): Promise<void> {
     },
   });
 
-  logger.info('Kafka → BullMQ bridge worker running', { topics: topicsToSubscribe });
+  logger.info('Kafka → Agent bridge worker running', { topics: topicsToSubscribe });
 }
 
 /**

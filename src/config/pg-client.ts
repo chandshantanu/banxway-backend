@@ -472,6 +472,11 @@ async function rpc(functionName: string, params?: Record<string, any>): Promise<
       : `SELECT * FROM ${functionName}()`;
 
     const result = await pool.query(sql, paramValues);
+    // For scalar functions (single row, single column), unwrap the value
+    // This matches Supabase RPC behavior: rpc('fn', {x}) returns the scalar, not {fn: value}
+    if (result.rows.length === 1 && result.fields.length === 1) {
+      return { data: result.rows[0][result.fields[0].name], error: null };
+    }
     return { data: result.rows.length === 1 ? result.rows[0] : result.rows, error: null };
   } catch (err: any) {
     return { data: null, error: { message: err.message, code: err.code || 'UNKNOWN' } };

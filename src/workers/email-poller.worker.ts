@@ -11,6 +11,7 @@ import { supabaseAdmin } from '../config/database.config';
 import { logger } from '../utils/logger';
 import { Channel, MessageDirection, ThreadType } from '../types';
 import { io } from '../index';
+import { publishToKafka, KAFKA_TOPICS } from '../config/kafka.config';
 
 // Get Redis connection and queue (lazy initialization)
 const emailQueue = getEmailQueue();
@@ -35,7 +36,8 @@ const emailWorker = new Worker(
         return await sendEmail(data);
 
       default:
-        throw new Error(`Unknown action: ${action}`);
+        logger.warn('Skipping email job with unknown action (stale queue entry)', { action, jobId: job.id });
+        return;
     }
   },
   { connection: getRedisConnection() }
@@ -179,10 +181,19 @@ async function pollInbox(accountId: string): Promise<void> {
                 buffer += chunk.toString('utf8');
               });
               stream.once('end', () => {
+                // Extract Message-ID header for BullMQ deduplication
+                // This prevents queuing the same email multiple times across poll cycles
+                const msgIdMatch = buffer.match(/^Message-ID:\s*(<[^>\r\n]+>)/mi);
+                const externalId = msgIdMatch?.[1]?.trim();
+
                 // Queue email processing with account context
                 emailQueue.add('PROCESS_EMAIL', {
                   action: 'PROCESS_EMAIL',
                   data: { emailBuffer: buffer, accountId: account.id },
+                }, {
+                  ...(externalId ? { jobId: `email:${externalId}` } : {}),
+                  removeOnComplete: 10,
+                  removeOnFail: 3,
                 });
               });
             });
@@ -369,6 +380,28 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
         message: message,
         account: account ? { id: account.id, name: account.name, email: account.email } : null,
       });
+
+      // Publish to Kafka for L1 agent pipeline processing
+      await publishToKafka(KAFKA_TOPICS.EMAIL_RAW, {
+        messageId: message.id,
+        threadId: thread.id,
+        channel: 'EMAIL',
+        direction: 'INBOUND',
+        from: parsed.from.address,
+        fromName: parsed.from.name,
+        to: parsed.to,
+        subject: parsed.subject,
+        content: parsed.text,
+        htmlContent: parsed.html,
+        attachments: parsed.attachments?.map((a: any) => ({
+          filename: a.filename,
+          contentType: a.contentType,
+          size: a.size,
+        })),
+        customerId: customer?.id,
+        accountId,
+        timestamp: new Date().toISOString(),
+      }, thread.id);
     }
   } catch (error: any) {
     logger.error('Error processing email', { accountId, error: error.message });
@@ -530,26 +563,23 @@ const POLL_INTERVAL = parseInt(process.env.EMAIL_POLL_INTERVAL || '15000'); // 1
 const EMAIL_SYNC_DAYS = parseInt(process.env.EMAIL_SYNC_DAYS || '30'); // Sync last 30 days to catch all emails
 const EMAIL_SYNC_LIMIT = parseInt(process.env.EMAIL_SYNC_LIMIT || '500'); // Limit to 500 emails per poll
 
-// AUTO-POLLING ENABLED: Upgraded to Standard C1 Redis tier (1GB)
-// Schedule polling for all inboxes
-setInterval(() => {
+// AUTO-POLLING ENABLED
+// Use singleton jobId to prevent concurrent poll storms:
+// BullMQ will not enqueue a new POLL_ALL_INBOXES if one is already waiting/active
+function schedulePollAllInboxes() {
   emailQueue.add('POLL_ALL_INBOXES', {
-    action: 'POLL_ALL_INBOXES'
+    action: 'POLL_ALL_INBOXES',
   }, {
-    removeOnComplete: 10,  // Keep only last 10 completed jobs
-    removeOnFail: 5,        // Keep only last 5 failed jobs
+    jobId: 'poll-all-inboxes-singleton',
+    removeOnComplete: 5,
+    removeOnFail: 3,
   });
-}, POLL_INTERVAL);
+}
+
+setInterval(schedulePollAllInboxes, POLL_INTERVAL);
 
 // Initial poll on startup (delayed 10 seconds to allow services to initialize)
-setTimeout(() => {
-  emailQueue.add('POLL_ALL_INBOXES', {
-    action: 'POLL_ALL_INBOXES'
-  }, {
-    removeOnComplete: 10,
-    removeOnFail: 5,
-  });
-}, 10000);
+setTimeout(schedulePollAllInboxes, 10000);
 
 logger.info('Email poller worker started - REAL-TIME SYNC MODE', {
   pollInterval: `${POLL_INTERVAL}ms (${POLL_INTERVAL / 1000}s)`,

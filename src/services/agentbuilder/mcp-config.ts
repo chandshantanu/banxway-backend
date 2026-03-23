@@ -4,13 +4,19 @@
  * All 17 Banxway agents across 5 layers
  *
  * @created 2026-02-05
- * @updated 2026-02-15
+ * @updated 2026-03-23
  */
+
+import { logger } from '../../utils/logger';
+
+// Token auto-refresh state
+let _cachedToken = process.env.AGENTBUILDER_AUTH_TOKEN || '';
+let _tokenExpiresAt = 0;
 
 export const AGENTBUILDER_CONFIG = {
   connectionId: process.env.AGENTBUILDER_CONNECTION_ID || '',
   apiUrl: process.env.AGENTBUILDER_API_URL || 'https://agentsapi.chatslytics.com',
-  authToken: process.env.AGENTBUILDER_AUTH_TOKEN || '',
+  get authToken() { return _cachedToken; },
 
   timeout: {
     execution: 30000,
@@ -82,13 +88,66 @@ export function isMcpEnabled(): boolean {
   return !!(AGENTBUILDER_CONFIG.connectionId || AGENTBUILDER_CONFIG.authToken);
 }
 
-/** Get auth header for AgentBuilder API calls */
+/** Refresh the AgentBuilder auth token using Chatslytics Supabase credentials */
+async function refreshToken(): Promise<string> {
+  const supabaseUrl = process.env.CHATSLYTICS_SUPABASE_URL || 'https://jrhvznqscglthpcrqjyn.supabase.co';
+  const anonKey = process.env.CHATSLYTICS_SUPABASE_ANON_KEY || '';
+  const email = process.env.CHATSLYTICS_AUTH_EMAIL || '';
+  const password = process.env.CHATSLYTICS_AUTH_PASSWORD || '';
+
+  if (!anonKey || !email || !password) {
+    logger.debug('Chatslytics credentials not configured, using static token');
+    return _cachedToken;
+  }
+
+  try {
+    const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: { 'apikey': anonKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json() as Record<string, any>;
+    if (data.access_token) {
+      _cachedToken = data.access_token as string;
+      _tokenExpiresAt = Date.now() + (data.expires_in ? Number(data.expires_in) * 1000 - 60000 : 3000000);
+      logger.info('AgentBuilder auth token refreshed', { expiresIn: data.expires_in });
+      return _cachedToken;
+    }
+    logger.error('Failed to refresh AgentBuilder token', { error: data.error || data.msg });
+  } catch (err: any) {
+    logger.error('Token refresh failed', { error: err.message });
+  }
+  return _cachedToken;
+}
+
+/** Get auth header for AgentBuilder API calls — auto-refreshes if expired */
+export async function getAuthHeaderAsync(): Promise<Record<string, string>> {
+  if (AGENTBUILDER_CONFIG.connectionId) {
+    return { 'X-MCP-Connection-ID': AGENTBUILDER_CONFIG.connectionId };
+  }
+  // Refresh if token is about to expire
+  if (_tokenExpiresAt > 0 && Date.now() > _tokenExpiresAt) {
+    await refreshToken();
+  }
+  if (_cachedToken) {
+    return { 'Authorization': `Bearer ${_cachedToken}` };
+  }
+  return {};
+}
+
+/** Sync version for backward compatibility — uses cached token */
 export function getAuthHeader(): Record<string, string> {
   if (AGENTBUILDER_CONFIG.connectionId) {
     return { 'X-MCP-Connection-ID': AGENTBUILDER_CONFIG.connectionId };
   }
-  if (AGENTBUILDER_CONFIG.authToken) {
-    return { 'Authorization': `Bearer ${AGENTBUILDER_CONFIG.authToken}` };
+  if (_cachedToken) {
+    return { 'Authorization': `Bearer ${_cachedToken}` };
   }
   return {};
+}
+
+// Auto-refresh token on startup and every 50 minutes
+if (process.env.CHATSLYTICS_AUTH_EMAIL && process.env.CHATSLYTICS_AUTH_PASSWORD) {
+  setTimeout(() => refreshToken(), 5000); // 5s after startup
+  setInterval(() => refreshToken(), 50 * 60 * 1000); // every 50 min
 }
