@@ -1,9 +1,17 @@
 import { Router } from 'express';
+import { authenticateRequest, requirePermission, AuthenticatedRequest } from '../../middleware/auth.middleware';
+import { Permission } from '../../utils/permissions';
+import { Response } from 'express';
 
 const router = Router();
 
-// Debug endpoint to check environment variables
-router.get('/env', (req, res) => {
+// Debug endpoint — admin-only, only enabled in non-production environments
+router.get('/env', authenticateRequest, requirePermission(Permission.MANAGE_SETTINGS), (req: AuthenticatedRequest, res: Response): void => {
+  if (process.env.NODE_ENV === 'production') {
+    res.status(404).json({ success: false, error: 'Not found' });
+    return;
+  }
+
   const redisUrl = process.env.REDIS_URL || 'NOT SET';
   const maskedUrl = redisUrl.replace(/:[^:@]+@/, ':****@');
 

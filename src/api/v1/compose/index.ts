@@ -1,12 +1,12 @@
-import { Router } from 'express';
-import { authenticateRequest } from '../../../middleware/auth.middleware';
+import { Router, Response } from 'express';
+import { authenticateRequest, AuthenticatedRequest } from '../../../middleware/auth.middleware';
 
 const router = Router();
 router.use(authenticateRequest);
 
-// TODO: Implement AI compose endpoints
-router.post('/suggestions', (req, res) => {
-  res.json({ success: true, data: [], message: 'Compose suggestions endpoint - TODO' });
+// Compose suggestions — returns empty until AI compose is implemented
+router.post('/suggestions', (req: AuthenticatedRequest, res: Response): void => {
+  res.json({ success: true, data: [] });
 });
 
 export default router;

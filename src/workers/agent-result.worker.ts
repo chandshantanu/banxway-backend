@@ -43,12 +43,13 @@ async function handleIngestionComplete(data: AgentResultJobData): Promise<void> 
   const { entityId: threadId, payload } = data;
   const { channel, rawContent, metadata } = payload;
 
-  // Upsert thread status
+  // Upsert thread pipeline status.
+  // agent_status column added in 011_fix_agent_message_columns.sql.
   await supabaseAdmin
     .from('communication_threads')
     .update({
       agent_status: 'processing',
-      metadata: { ...metadata, lastAgentId: data.agentId },
+      workflow_state: { lastAgentId: data.agentId, ...metadata },
     })
     .eq('id', threadId);
 
@@ -72,14 +73,16 @@ async function handleProcessingComplete(data: AgentResultJobData): Promise<void>
   const { entityId: messageId, payload } = data;
   const { intent, entities, confidence, hasDocuments, documentUrls } = payload;
 
-  // Update the communication message with parsed intent + entities
+  // Update the communication message with parsed intent + entities.
+  // Column names match 001_initial_schema.sql: intent, extracted_data, confidence_score.
+  // ai_processing_status added in 011_fix_agent_message_columns.sql.
   await supabaseAdmin
     .from('communication_messages')
     .update({
-      agent_intent: intent,
-      agent_entities: entities,
-      agent_confidence: confidence,
-      agent_status: 'processed',
+      intent,
+      extracted_data: entities,
+      confidence_score: confidence,
+      ai_processing_status: 'processed',
     })
     .eq('id', messageId);
 

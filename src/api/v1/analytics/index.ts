@@ -310,15 +310,15 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
           total: emailTotal || 0,
           unread: emailUnread || 0,
           urgent: urgentByChannel.email,
-          avgResponseTime: 45, // TODO: Calculate actual avg response time
-          trend: 0, // TODO: Calculate trend
+          avgResponseTime: null, // not yet computed
+          trend: 0,
           recentActivity: formatActivity(emailMessages),
         },
         whatsapp: {
           total: whatsappTotal || 0,
           unread: whatsappUnread || 0,
           urgent: urgentByChannel.whatsapp,
-          avgResponseTime: 18,
+          avgResponseTime: null,
           trend: 0,
           recentActivity: formatActivity(whatsappMessages),
         },
@@ -326,7 +326,7 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
           total: phoneTotal || 0,
           unread: phoneUnread || 0,
           urgent: urgentByChannel.phone,
-          avgResponseTime: 120,
+          avgResponseTime: null,
           trend: 0,
           recentActivity: formatActivity(phoneMessages),
         },

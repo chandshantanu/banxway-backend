@@ -1,10 +1,12 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
+import { authenticateRequest, AuthenticatedRequest } from '../../../middleware/auth.middleware';
 
 const router = Router();
+router.use(authenticateRequest);
 
-// TODO: Implement action endpoints
-router.get('/', (req, res) => {
-  res.json({ success: true, data: [], message: 'Actions endpoint - TODO' });
+// Communication actions — returns empty until workflow engine is implemented
+router.get('/', (req: AuthenticatedRequest, res: Response): void => {
+  res.json({ success: true, data: [] });
 });
 
 export default router;
