@@ -24,6 +24,10 @@ const httpServer = createServer(app);
 const PORT = process.env.PORT || 8000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
+// Trust Azure Container Apps proxy (sets correct client IP from X-Forwarded-For)
+// Required for rate-limiting and IP-based features to work correctly behind Azure's load balancer
+app.set('trust proxy', 1);
+
 // =====================================================
 // MIDDLEWARE
 // =====================================================
@@ -81,6 +85,7 @@ app.get('/health', (req, res) => {
   });
 });
 
+
 // API v1 routes
 app.use('/api/v1', apiV1Router);
 
@@ -126,6 +131,26 @@ async function startServer() {
       logger.warn('Database connection test failed', { error: error.message });
     } else {
       logger.info('Database connection successful');
+    }
+
+    // GoTrue search_path fix for v2.164.0+
+    // Root cause: banxwayadmin role has search_path = 'public, auth' (public first).
+    // GoTrue queries unqualified 'users' table, which resolves to public.users (no aud column).
+    // Fix: ensure auth schema is searched before public so GoTrue finds auth.users.
+    try {
+      const { pool } = require('./config/pg-client');
+      const roleResult = await pool.query(`SELECT rolconfig FROM pg_roles WHERE rolname = 'banxwayadmin'`);
+      const rolconfig: string[] = roleResult.rows[0]?.rolconfig || [];
+      const hasCorrectSearchPath = rolconfig.some((c: string) => c.startsWith('search_path=auth'));
+      if (!hasCorrectSearchPath) {
+        await pool.query(`ALTER ROLE banxwayadmin SET search_path = auth, public`);
+        logger.info('GoTrue fix: search_path for banxwayadmin set to auth, public');
+      } else {
+        logger.info('GoTrue fix: search_path already correct', { rolconfig });
+      }
+    } catch (gotrueErr: any) {
+      // Non-fatal
+      logger.warn('GoTrue search_path fix failed', { error: gotrueErr.message });
     }
 
     // Test Redis connection (non-blocking)

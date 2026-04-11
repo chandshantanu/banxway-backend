@@ -17,6 +17,10 @@ import { publishToKafka, KAFKA_TOPICS } from '../config/kafka.config';
 const emailQueue = getEmailQueue();
 
 // Worker to process email jobs
+// concurrency: 10 — allows up to 10 PROCESS_EMAIL jobs to run in parallel, which
+// prevents a large batch of emails from blocking POLL_ALL_INBOXES / POLL_INBOX jobs.
+// POLL jobs use priority: 1 (highest in BullMQ) so they always jump ahead of
+// PROCESS_EMAIL jobs in the queue.
 const emailWorker = new Worker(
   'email-processing',
   async (job) => {
@@ -40,7 +44,7 @@ const emailWorker = new Worker(
         return;
     }
   },
-  { connection: getRedisConnection() }
+  { connection: getRedisConnection(), concurrency: 4 }
 );
 
 emailWorker.on('completed', (job) => {
@@ -76,11 +80,24 @@ async function pollAllInboxes(): Promise<void> {
       emails: accounts.map(a => a.email),
     });
 
-    // Queue individual poll jobs for each account
+    // Queue individual poll jobs for each account.
+    // jobId: per-account singleton → prevents duplicate concurrent polling of the same inbox.
+    // priority: 1 (highest) → POLL_INBOX runs before any queued PROCESS_EMAIL jobs.
+    // removeOnComplete: true → frees the per-account jobId immediately so the next
+    //   poll cycle can schedule it again without being blocked by the completed state.
     for (const account of accounts) {
       await emailQueue.add('POLL_INBOX', {
         action: 'POLL_INBOX',
         data: { accountId: account.id },
+      }, {
+        jobId: `poll-inbox-${account.id}`,
+        priority: 1,
+        removeOnComplete: true,
+        removeOnFail: 3,
+      }).catch(err => {
+        if (!err?.message?.includes('already') && !err?.message?.includes('duplicate') && !err?.message?.includes('Duplicate')) {
+          logger.warn('Failed to queue POLL_INBOX job', { accountId: account.id, error: err.message });
+        }
       });
     }
   } catch (error: any) {
@@ -184,16 +201,37 @@ async function pollInbox(accountId: string): Promise<void> {
                 // Extract Message-ID header for BullMQ deduplication
                 // This prevents queuing the same email multiple times across poll cycles
                 const msgIdMatch = buffer.match(/^Message-ID:\s*(<[^>\r\n]+>)/mi);
-                const externalId = msgIdMatch?.[1]?.trim();
+                const rawExternalId = msgIdMatch?.[1]?.trim();
+
+                // BullMQ jobIds cannot contain ':', '<', '>', '@' or other special chars.
+                // Strip angle brackets and replace disallowed characters with safe equivalents.
+                const safeJobId = rawExternalId
+                  ? `email_${rawExternalId.replace(/[<>]/g, '').replace(/[^a-zA-Z0-9._@-]/g, '_')}`
+                  : undefined;
 
                 // Queue email processing with account context
+                // NOTE: emailQueue.add() returns a Promise — must .catch() here because
+                // we're inside an event handler that cannot be made async.
+                // Without .catch(), Redis errors or duplicate-key conflicts become
+                // unhandled rejections and can crash the worker process.
                 emailQueue.add('PROCESS_EMAIL', {
                   action: 'PROCESS_EMAIL',
                   data: { emailBuffer: buffer, accountId: account.id },
                 }, {
-                  ...(externalId ? { jobId: `email:${externalId}` } : {}),
+                  ...(safeJobId ? { jobId: safeJobId } : {}),
                   removeOnComplete: 10,
                   removeOnFail: 3,
+                }).catch(err => {
+                  // BullMQ throws on duplicate jobId (already queued/processing) — this is normal
+                  if (err?.message?.includes('already') || err?.message?.includes('duplicate') || err?.message?.includes('Duplicate')) {
+                    logger.debug('Email already queued (duplicate jobId skipped)', { rawExternalId });
+                  } else {
+                    logger.error('Failed to enqueue PROCESS_EMAIL job', {
+                      rawExternalId,
+                      accountId: account.id,
+                      error: err.message,
+                    });
+                  }
                 });
               });
             });
@@ -381,8 +419,11 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
         account: account ? { id: account.id, name: account.name, email: account.email } : null,
       });
 
-      // Publish to Kafka for L1 agent pipeline processing
-      await publishToKafka(KAFKA_TOPICS.EMAIL_RAW, {
+      // Publish to Kafka for L1 agent pipeline processing.
+      // Non-fatal: email is already saved to DB and visible in inbox.
+      // Kafka is for downstream AI agent processing only — failures here
+      // must NOT fail the job or prevent the email from appearing in the UI.
+      publishToKafka(KAFKA_TOPICS.EMAIL_RAW, {
         messageId: message.id,
         threadId: thread.id,
         channel: 'EMAIL',
@@ -401,7 +442,12 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
         customerId: customer?.id,
         accountId,
         timestamp: new Date().toISOString(),
-      }, thread.id);
+      }, thread.id).catch((kafkaErr: any) => {
+        logger.warn('Failed to publish email to Kafka (non-fatal — email saved to DB)', {
+          messageId: message.id,
+          error: kafkaErr.message,
+        });
+      });
     }
   } catch (error: any) {
     logger.error('Error processing email', { accountId, error: error.message });
@@ -565,21 +611,70 @@ const EMAIL_SYNC_LIMIT = parseInt(process.env.EMAIL_SYNC_LIMIT || '500'); // Lim
 
 // AUTO-POLLING ENABLED
 // Use singleton jobId to prevent concurrent poll storms:
-// BullMQ will not enqueue a new POLL_ALL_INBOXES if one is already waiting/active
+// BullMQ will not enqueue a new POLL_ALL_INBOXES if one is already waiting/active.
+// On startup, clear any stuck failed/delayed singleton job so polling resumes immediately
+// rather than waiting for an exponential backoff delay (which can be hours long).
+async function clearStuckSingleton(): Promise<void> {
+  try {
+    const existingJob = await emailQueue.getJob('poll-all-inboxes-singleton');
+    if (existingJob) {
+      const state = await existingJob.getState();
+      // Remove any non-active singleton on startup so the fresh instance can schedule cleanly.
+      // 'active' jobs should not be interrupted — they are currently being processed.
+      if (state !== 'active') {
+        logger.info(`Clearing singleton poll job on startup (state: ${state}) to resume polling`);
+        await existingJob.remove();
+      }
+    }
+  } catch (err: any) {
+    logger.warn('Could not check/clear singleton poll job', { error: err.message });
+  }
+
+  // Also clear any stuck per-account POLL_INBOX jobs from previous deployments.
+  // These become stuck (failed/stalled) when the container restarts mid-poll, leaving
+  // the jobId occupied and blocking new POLL_INBOX jobs from being queued.
+  try {
+    const stuckStates = ['waiting', 'delayed', 'failed'] as const;
+    for (const state of stuckStates) {
+      const jobs = await emailQueue.getJobs([state], 0, 200);
+      for (const job of jobs) {
+        if (job.id?.startsWith('poll-inbox-') || job.id?.startsWith('poll-all-inboxes')) {
+          logger.info(`Clearing stuck ${state} poll job on startup`, { jobId: job.id });
+          await job.remove().catch(() => {});
+        }
+      }
+    }
+  } catch (err: any) {
+    logger.warn('Could not clear stuck per-account poll jobs', { error: err.message });
+  }
+}
+
 function schedulePollAllInboxes() {
+  // removeOnComplete: true → job is deleted from Redis immediately on success,
+  // freeing the singleton jobId so the next setInterval tick can add a new one.
+  // removeOnComplete: N (keeping N completed jobs) blocks re-scheduling because BullMQ
+  // treats the "completed" state as still "owned" by that jobId.
   emailQueue.add('POLL_ALL_INBOXES', {
     action: 'POLL_ALL_INBOXES',
   }, {
     jobId: 'poll-all-inboxes-singleton',
-    removeOnComplete: 5,
+    priority: 1,
+    removeOnComplete: true,
     removeOnFail: 3,
+  }).catch(err => {
+    // Duplicate jobId is expected when a poll is already queued/active — not an error
+    if (!err?.message?.includes('already') && !err?.message?.includes('duplicate') && !err?.message?.includes('Duplicate')) {
+      logger.warn('Failed to schedule poll-all-inboxes job', { error: err.message });
+    }
   });
 }
 
 setInterval(schedulePollAllInboxes, POLL_INTERVAL);
 
-// Initial poll on startup (delayed 10 seconds to allow services to initialize)
-setTimeout(schedulePollAllInboxes, 10000);
+// Initial poll on startup: clear any stuck singleton first, then poll after 10s
+clearStuckSingleton().then(() => {
+  setTimeout(schedulePollAllInboxes, 10000);
+});
 
 logger.info('Email poller worker started - REAL-TIME SYNC MODE', {
   pollInterval: `${POLL_INTERVAL}ms (${POLL_INTERVAL / 1000}s)`,

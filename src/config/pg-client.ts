@@ -16,9 +16,9 @@ import { logger } from '../utils/logger';
 const poolConfig: PoolConfig = {
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
-  max: 20,
+  max: 30,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
+  connectionTimeoutMillis: 5000,
 };
 
 export const pool = new Pool(poolConfig);

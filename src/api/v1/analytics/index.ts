@@ -211,7 +211,7 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
     // Get email messages
     const { data: emailMessages } = await supabaseAdmin
       .from('communication_messages')
-      .select('id, from_address, subject, created_at, is_read, thread_id')
+      .select('id, from_address, subject, created_at, read_at, thread_id')
       .eq('channel', 'EMAIL')
       .eq('direction', 'INBOUND')
       .order('created_at', { ascending: false })
@@ -220,7 +220,7 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
     // Get WhatsApp messages
     const { data: whatsappMessages } = await supabaseAdmin
       .from('communication_messages')
-      .select('id, from_address, subject, created_at, is_read, thread_id')
+      .select('id, from_address, subject, created_at, read_at, thread_id')
       .eq('channel', 'WHATSAPP')
       .eq('direction', 'INBOUND')
       .order('created_at', { ascending: false })
@@ -229,7 +229,7 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
     // Get Voice/Phone messages
     const { data: phoneMessages } = await supabaseAdmin
       .from('communication_messages')
-      .select('id, from_address, subject, created_at, is_read, thread_id')
+      .select('id, from_address, subject, created_at, read_at, thread_id')
       .eq('channel', 'VOICE')
       .eq('direction', 'INBOUND')
       .order('created_at', { ascending: false })
@@ -238,7 +238,7 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
     // Get SMS messages
     const { data: smsMessages } = await supabaseAdmin
       .from('communication_messages')
-      .select('id, from_address, subject, created_at, is_read, thread_id')
+      .select('id, from_address, subject, created_at, read_at, thread_id')
       .eq('channel', 'SMS')
       .eq('direction', 'INBOUND')
       .order('created_at', { ascending: false })
@@ -254,7 +254,7 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
       .from('communication_messages')
       .select('*', { count: 'exact' })
       .eq('channel', 'EMAIL')
-      .eq('is_read', false);
+      .is('read_at', null);
 
     const { count: whatsappTotal } = await supabaseAdmin
       .from('communication_messages')
@@ -265,7 +265,7 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
       .from('communication_messages')
       .select('*', { count: 'exact' })
       .eq('channel', 'WHATSAPP')
-      .eq('is_read', false);
+      .is('read_at', null);
 
     const { count: phoneTotal } = await supabaseAdmin
       .from('communication_messages')
@@ -276,7 +276,7 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
       .from('communication_messages')
       .select('*', { count: 'exact' })
       .eq('channel', 'VOICE')
-      .eq('is_read', false);
+      .is('read_at', null);
 
     // Get urgent threads (high priority, not resolved)
     const { data: urgentThreads } = await supabaseAdmin
@@ -299,7 +299,7 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
         from: m.from_address || 'Unknown',
         subject: m.subject || undefined,
         timestamp: new Date(m.created_at),
-        isUnread: !m.is_read,
+        isUnread: !m.read_at,
       }));
     };
 
