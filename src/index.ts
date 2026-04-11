@@ -133,24 +133,22 @@ async function startServer() {
       logger.info('Database connection successful');
     }
 
-    // GoTrue search_path fix for v2.164.0+
-    // Root cause: banxwayadmin role has search_path = 'public, auth' (public first).
-    // GoTrue queries unqualified 'users' table, which resolves to public.users (no aud column).
-    // Fix: ensure auth schema is searched before public so GoTrue finds auth.users.
+    // Ensure banxwayadmin search_path is 'public, auth' (public first so app queries
+    // resolve to public.users correctly). GoTrue's search_path is set separately
+    // via its DATABASE_URL connection string parameter (&search_path=auth).
     try {
       const { pool } = require('./config/pg-client');
       const roleResult = await pool.query(`SELECT rolconfig FROM pg_roles WHERE rolname = 'banxwayadmin'`);
       const rolconfig: string[] = roleResult.rows[0]?.rolconfig || [];
-      const hasCorrectSearchPath = rolconfig.some((c: string) => c.startsWith('search_path=auth'));
-      if (!hasCorrectSearchPath) {
-        await pool.query(`ALTER ROLE banxwayadmin SET search_path = auth, public`);
-        logger.info('GoTrue fix: search_path for banxwayadmin set to auth, public');
+      const searchPathEntry = rolconfig.find((c: string) => c.startsWith('search_path='));
+      if (searchPathEntry !== 'search_path=public, auth') {
+        await pool.query(`ALTER ROLE banxwayadmin SET search_path = public, auth`);
+        logger.info('DB fix: search_path for banxwayadmin restored to public, auth', { was: searchPathEntry });
       } else {
-        logger.info('GoTrue fix: search_path already correct', { rolconfig });
+        logger.info('DB fix: banxwayadmin search_path already correct');
       }
-    } catch (gotrueErr: any) {
-      // Non-fatal
-      logger.warn('GoTrue search_path fix failed', { error: gotrueErr.message });
+    } catch (dbFixErr: any) {
+      logger.warn('DB search_path fix failed', { error: dbFixErr.message });
     }
 
     // Test Redis connection (non-blocking)
