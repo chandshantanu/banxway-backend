@@ -368,16 +368,42 @@ export class WorkflowEngine {
   private async executeSendEmailNode(
     node: WorkflowNode,
     instance: WorkflowInstance
-  ): Promise<{ nextNodeId?: string }> {
+  ): Promise<{ nextNodeId?: string; output?: any }> {
     const config = node.config as any;
 
-    // TODO: Implement email sending via Nodemailer
-    logger.info('Sending email', {
-      to: config.to,
-      subject: config.subject,
+    const to = this.resolveVariable(config.to, instance);
+    const subject = this.resolveVariable(config.subject || '', instance);
+    const html = this.resolveVariable(config.html || config.body || '', instance);
+    const text = this.resolveVariable(config.text || '', instance);
+    const cc = config.cc ? this.resolveVariable(config.cc, instance) : undefined;
+
+    if (!to) {
+      logger.error('SEND_EMAIL node missing "to" address', {
+        nodeId: node.id,
+        instanceId: instance.id,
+      });
+      throw new Error('SEND_EMAIL node requires a "to" address');
+    }
+
+    const emailSenderService = (await import('../email/email-sender.service')).default;
+
+    const result = await emailSenderService.sendEmail({
+      to,
+      subject,
+      html: html || undefined,
+      text: text || undefined,
+      cc: cc || undefined,
     });
 
-    return { nextNodeId: config.nextNodeId };
+    logger.info('SEND_EMAIL node completed', {
+      nodeId: node.id,
+      instanceId: instance.id,
+      to,
+      subject,
+      messageId: result?.messageId,
+    });
+
+    return { nextNodeId: config.nextNodeId, output: { messageId: result?.messageId, to, subject } };
   }
 
   /**
@@ -408,13 +434,43 @@ export class WorkflowEngine {
   private async executeSendSMSNode(
     node: WorkflowNode,
     instance: WorkflowInstance
-  ): Promise<{ nextNodeId?: string }> {
+  ): Promise<{ nextNodeId?: string; output?: any }> {
     const config = node.config as any;
 
-    // TODO: Implement SMS sending via Exotel
-    logger.info('Sending SMS', { to: config.to });
+    const to = this.resolveVariable(config.to, instance);
+    const body = this.resolveVariable(config.body || config.message || '', instance);
 
-    return { nextNodeId: config.nextNodeId };
+    if (!to) {
+      logger.error('SEND_SMS node missing "to" number', {
+        nodeId: node.id,
+        instanceId: instance.id,
+      });
+      throw new Error('SEND_SMS node requires a "to" phone number');
+    }
+
+    if (!body) {
+      logger.error('SEND_SMS node missing message body', {
+        nodeId: node.id,
+        instanceId: instance.id,
+      });
+      throw new Error('SEND_SMS node requires a message body');
+    }
+
+    const exotelSMSService = (await import('../exotel/sms.service')).default;
+
+    const result = await exotelSMSService.sendSMS({
+      to,
+      body,
+      priority: config.priority || 'normal',
+    });
+
+    logger.info('SEND_SMS node completed', {
+      nodeId: node.id,
+      instanceId: instance.id,
+      to,
+    });
+
+    return { nextNodeId: config.nextNodeId, output: { to, status: result?.status } };
   }
 
   /**
