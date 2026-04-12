@@ -290,7 +290,7 @@ class EmailAccountService {
         host: account.imap_host,
         port: account.imap_port,
         tls: account.imap_tls,
-        tlsOptions: { rejectUnauthorized: false },
+        tlsOptions: { rejectUnauthorized: process.env.NODE_ENV === 'production' },
         connTimeout: 10000,
       });
 

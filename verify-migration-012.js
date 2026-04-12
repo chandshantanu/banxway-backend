@@ -18,7 +18,7 @@ console.log('🔍 Verifying Migration 012: Rate Management System\n');
 async function verify() {
   const client = new Client({
     connectionString: DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : { rejectUnauthorized: false }
   });
 
   try {

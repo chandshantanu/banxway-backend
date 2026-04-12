@@ -150,7 +150,7 @@ async function pollInbox(accountId: string): Promise<void> {
       host: account.imap_host,
       port: account.imap_port,
       tls: account.imap_tls,
-      tlsOptions: { rejectUnauthorized: false },
+      tlsOptions: { rejectUnauthorized: process.env.NODE_ENV === 'production' },
     });
 
     imap.once('ready', () => {
