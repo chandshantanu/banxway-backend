@@ -576,4 +576,176 @@ router.get('/rate-dashboard', requirePermission(Permission.VIEW_ANALYTICS), asyn
   }
 });
 
+// ============================================================================
+// Pipeline Queue & Parsing Progress
+// ============================================================================
+
+/**
+ * GET /api/v1/analytics/pipeline-status
+ * Shows the real-time parsing/correlation queue: how many threads are
+ * correlated, how many are pending, how many failed, and the top
+ * unprocessed senders. This is the "queue indicator" the user sees.
+ */
+router.get('/pipeline-status', requirePermission(Permission.VIEW_ANALYTICS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    // Thread correlation status breakdown
+    const [
+      totalResult,
+      matchedResult,
+      pendingResult,
+      failedResult,
+      messagesResult,
+      // top unique senders with no CRM link
+      uncorrelatedSendersResult,
+      // recent correlations
+      recentCorrelationsResult,
+    ] = await Promise.all([
+      safeQuery(supabaseAdmin.from('communication_threads').select('*', { count: 'exact' }).eq('archived', false)),
+      safeQuery(supabaseAdmin.from('communication_threads').select('*', { count: 'exact' }).eq('correlation_status', 'matched')),
+      safeQuery(supabaseAdmin.from('communication_threads').select('*', { count: 'exact' }).eq('correlation_status', 'pending')),
+      safeQuery(supabaseAdmin.from('communication_threads').select('*', { count: 'exact' }).eq('correlation_status', 'failed')),
+      safeQuery(supabaseAdmin.from('communication_messages').select('*', { count: 'exact' })),
+      safeQuery(supabaseAdmin.from('communication_messages')
+        .select('from_address')
+        .eq('direction', 'INBOUND')
+        .limit(500)),
+      safeQuery(supabaseAdmin.from('communication_threads')
+        .select('id, crm_customer_id, lead_classification, correlated_at')
+        .eq('correlation_status', 'matched')
+        .order('correlated_at', { ascending: false })
+        .limit(10)),
+    ]);
+
+    // Count unique senders from messages
+    const senderSet = new Set<string>();
+    ((uncorrelatedSendersResult.data as any[]) || []).forEach((m: any) => {
+      if (m.from_address) senderSet.add(m.from_address);
+    });
+
+    // CRM customers count
+    const crmResult = await safeQuery(supabaseAdmin.from('crm_customers').select('*', { count: 'exact' }));
+
+    const total = totalResult.count;
+    const matched = matchedResult.count;
+    const pending = pendingResult.count;
+    const failed = failedResult.count;
+    const notStarted = total - matched - pending - failed;
+
+    res.json({
+      success: true,
+      data: {
+        threads: {
+          total,
+          correlated: matched,
+          pending,
+          failed,
+          not_started: notStarted > 0 ? notStarted : 0,
+          progress_pct: total > 0 ? Math.round((matched / total) * 100) : 0,
+        },
+        messages: {
+          total: messagesResult.count,
+          unique_senders: senderSet.size,
+        },
+        crm: {
+          total_customers: crmResult.count,
+        },
+        recent_correlations: ((recentCorrelationsResult.data as any[]) || []).map((t: any) => ({
+          thread_id: t.id,
+          classification: t.lead_classification,
+          correlated_at: t.correlated_at,
+        })),
+        lastUpdated: new Date().toISOString(),
+      },
+    });
+  } catch (error: any) {
+    logger.error('Error fetching pipeline status', { error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch pipeline status' });
+  }
+});
+
+/**
+ * POST /api/v1/analytics/backfill-correlation
+ * Triggers correlation on all threads that have never been correlated.
+ * Reads each thread's inbound messages to find the sender's email,
+ * then queues a correlation job for each.
+ * Returns immediately with the count queued — processing is async.
+ */
+router.post('/backfill-correlation', requirePermission(Permission.VIEW_ANALYTICS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { queueAgentResult } = require('../../../workers/agent-result.worker');
+
+    // Find all threads that haven't been correlated yet
+    const { data: uncorrelatedThreads, error } = await supabaseAdmin
+      .from('communication_threads')
+      .select('id')
+      .is('crm_customer_id', null)
+      .eq('archived', false)
+      .limit(1000); // Process in batches of 1000
+
+    if (error || !uncorrelatedThreads?.length) {
+      res.json({
+        success: true,
+        data: { queued: 0, message: 'No uncorrelated threads found' },
+      });
+      return;
+    }
+
+    let queued = 0;
+    const batchSize = 50;
+
+    for (let i = 0; i < uncorrelatedThreads.length; i += batchSize) {
+      const batch = uncorrelatedThreads.slice(i, i + batchSize);
+      const threadIds = batch.map((t: any) => t.id);
+
+      // For each thread, find its first inbound message to get the sender
+      const { data: messages } = await supabaseAdmin
+        .from('communication_messages')
+        .select('thread_id, from_address, from_name')
+        .in('thread_id', threadIds)
+        .eq('direction', 'INBOUND')
+        .order('created_at', { ascending: true });
+
+      // Group first message per thread
+      const threadSenders = new Map<string, { email: string; name: string }>();
+      for (const msg of (messages || [])) {
+        if (msg.from_address && !threadSenders.has(msg.thread_id)) {
+          threadSenders.set(msg.thread_id, {
+            email: msg.from_address,
+            name: msg.from_name || '',
+          });
+        }
+      }
+
+      // Queue correlation for each
+      for (const [threadId, sender] of threadSenders) {
+        await queueAgentResult({
+          resultType: 'correlation_complete',
+          agentId: 'backfill',
+          entityId: threadId,
+          payload: {
+            threadId,
+            fromEmail: sender.email,
+            fromName: sender.name,
+          },
+        }).catch(() => {}); // swallow individual failures
+        queued++;
+      }
+    }
+
+    logger.info('Backfill correlation started', { queued, total: uncorrelatedThreads.length });
+
+    res.json({
+      success: true,
+      data: {
+        queued,
+        total_uncorrelated: uncorrelatedThreads.length,
+        message: `Queued ${queued} threads for correlation. Processing async.`,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Error starting backfill', { error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to start backfill' });
+  }
+});
+
 export default router;
