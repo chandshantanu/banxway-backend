@@ -68,7 +68,7 @@ router.get('/', requirePermission(Permission.VIEW_THREADS), async (req: Authenti
 
     const { data: shipments } = await shipmentQuery;
 
-    shipments?.forEach(shipment => {
+    shipments?.forEach((shipment: any) => {
       queueItems.push({
         id: shipment.id,
         type: 'shipment',
@@ -111,7 +111,7 @@ router.get('/', requirePermission(Permission.VIEW_THREADS), async (req: Authenti
 
     const { data: threads } = await threadQuery;
 
-    threads?.forEach(thread => {
+    threads?.forEach((thread: any) => {
       queueItems.push({
         id: thread.id,
         type: 'thread',
@@ -146,7 +146,7 @@ router.get('/', requirePermission(Permission.VIEW_THREADS), async (req: Authenti
       .in('status', ['PENDING', 'IN_PROGRESS'])
       .order('due_at', { ascending: true, nullsFirst: false });
 
-    actions?.forEach(action => {
+    actions?.forEach((action: any) => {
       queueItems.push({
         id: action.id,
         type: 'document',

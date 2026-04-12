@@ -17,10 +17,11 @@ router.get('/', async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'User not authenticated',
       });
+      return;
     }
 
     // Query parameters
@@ -65,27 +66,30 @@ router.patch('/:id/read', async (req: AuthenticatedRequest, res: Response) => {
     const notificationId = req.params.id;
 
     if (!userId) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'User not authenticated',
       });
+      return;
     }
 
     // Verify notification belongs to user
     const notification = await notificationRepository.findById(notificationId);
 
     if (!notification) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Notification not found',
       });
+      return;
     }
 
     if (notification.user_id !== userId) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: 'You do not have permission to access this notification',
       });
+      return;
     }
 
     // Mark as read
@@ -118,10 +122,11 @@ router.post('/read-all', async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'User not authenticated',
       });
+      return;
     }
 
     // Mark all as read
@@ -155,27 +160,30 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
     const notificationId = req.params.id;
 
     if (!userId) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'User not authenticated',
       });
+      return;
     }
 
     // Verify notification belongs to user
     const notification = await notificationRepository.findById(notificationId);
 
     if (!notification) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Notification not found',
       });
+      return;
     }
 
     if (notification.user_id !== userId) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: 'You do not have permission to delete this notification',
       });
+      return;
     }
 
     // Delete notification

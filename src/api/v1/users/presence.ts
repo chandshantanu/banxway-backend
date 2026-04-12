@@ -37,7 +37,7 @@ router.get('/online', async (req: AuthenticatedRequest, res: Response): Promise<
     }
 
     // Transform to presence format
-    const onlineUsers = (users || []).map(user => {
+    const onlineUsers = (users || []).map((user: any) => {
       const lastSeenDate = new Date(user.last_seen_at);
       const minutesAgo = Math.floor((Date.now() - lastSeenDate.getTime()) / 60000);
 

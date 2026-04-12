@@ -90,10 +90,11 @@ router.get('/expiring', async (req: AuthenticatedRequest, res: Response) => {
     });
   } catch (error: any) {
     if (error.message.includes('must be between')) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     logger.error('Failed to get expiring rate cards', { error: error.message });
@@ -126,10 +127,11 @@ router.get('/search', async (req: AuthenticatedRequest, res: Response) => {
     });
   } catch (error: any) {
     if (error.message.includes('required')) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     logger.error('Failed to search rate cards', { error: error.message });
@@ -155,10 +157,11 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
     });
   } catch (error: any) {
     if (error.message === 'Rate card not found') {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     logger.error('Failed to get rate card', { error: error.message });
@@ -179,20 +182,22 @@ router.post('/:id/calculate', async (req: AuthenticatedRequest, res: Response) =
     const { chargeable_weight } = req.body;
 
     if (!chargeable_weight || chargeable_weight <= 0) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Valid chargeable_weight is required',
       });
+      return;
     }
 
     const rateCard = await rateCardService.getRateCardById(id);
     const calculation = rateCardService.calculateFreightCost(rateCard, chargeable_weight);
 
     if (!calculation) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Unable to calculate cost - no applicable weight slab found',
       });
+      return;
     }
 
     res.json({
@@ -205,10 +210,11 @@ router.post('/:id/calculate', async (req: AuthenticatedRequest, res: Response) =
     });
   } catch (error: any) {
     if (error.message === 'Rate card not found') {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     logger.error('Failed to calculate freight cost', { error: error.message });
@@ -233,10 +239,11 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
     });
   } catch (error: any) {
     if (error.message.includes('required') || error.message.includes('must')) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     logger.error('Failed to create rate card', { error: error.message });
@@ -262,10 +269,11 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
     });
   } catch (error: any) {
     if (error.message.includes('required') || error.message.includes('must')) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     logger.error('Failed to update rate card', { error: error.message });
@@ -288,10 +296,11 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
     res.status(204).send();
   } catch (error: any) {
     if (error.message === 'Rate card not found') {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     logger.error('Failed to delete rate card', { error: error.message });

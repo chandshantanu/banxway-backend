@@ -54,10 +54,11 @@ router.get('/', requirePermission(Permission.VIEW_CUSTOMERS), async (req: Authen
     logger.error('Error in GET /customers', { error: error.message });
 
     if (error instanceof CrmError) {
-      return res.status(error.statusCode).json({
+      res.status(error.statusCode).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     res.status(500).json({
@@ -84,17 +85,19 @@ router.get('/:id', requirePermission(Permission.VIEW_CUSTOMERS), async (req: Aut
     logger.error('Error in GET /customers/:id', { id: req.params.id, error: error.message });
 
     if (error instanceof CustomerNotFoundError) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     if (error instanceof CrmError) {
-      return res.status(error.statusCode).json({
+      res.status(error.statusCode).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     res.status(500).json({
@@ -126,10 +129,11 @@ router.post('/', requirePermission(Permission.CREATE_CUSTOMERS), async (req: Aut
     logger.error('Error in POST /customers', { error: error.message, body: req.body });
 
     if (error instanceof CrmError) {
-      return res.status(error.statusCode).json({
+      res.status(error.statusCode).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     res.status(500).json({
@@ -161,17 +165,19 @@ router.patch('/:id', requirePermission(Permission.UPDATE_CUSTOMERS), async (req:
     logger.error('Error in PATCH /customers/:id', { id: req.params.id, error: error.message });
 
     if (error instanceof CustomerNotFoundError) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     if (error instanceof CrmError) {
-      return res.status(error.statusCode).json({
+      res.status(error.statusCode).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     res.status(500).json({
@@ -204,17 +210,19 @@ router.post('/:id/convert', requirePermission(Permission.UPDATE_CUSTOMERS), asyn
     logger.error('Error in POST /customers/:id/convert', { id: req.params.id, error: error.message });
 
     if (error instanceof CustomerNotFoundError) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     if (error instanceof CrmError) {
-      return res.status(error.statusCode).json({
+      res.status(error.statusCode).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     res.status(500).json({
@@ -243,17 +251,19 @@ router.delete('/:id', requirePermission(Permission.DELETE_CUSTOMERS), async (req
     logger.error('Error in DELETE /customers/:id', { id: req.params.id, error: error.message });
 
     if (error instanceof CustomerNotFoundError) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     if (error instanceof CrmError) {
-      return res.status(error.statusCode).json({
+      res.status(error.statusCode).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     res.status(500).json({
@@ -281,17 +291,19 @@ router.get('/:id/contacts', requirePermission(Permission.VIEW_CUSTOMERS), async 
     logger.error('Error in GET /customers/:id/contacts', { id: req.params.id, error: error.message });
 
     if (error instanceof CustomerNotFoundError) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     if (error instanceof CrmError) {
-      return res.status(error.statusCode).json({
+      res.status(error.statusCode).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     res.status(500).json({
@@ -329,17 +341,19 @@ router.post('/:id/contacts', requirePermission(Permission.CREATE_CUSTOMERS), asy
     logger.error('Error in POST /customers/:id/contacts', { id: req.params.id, error: error.message });
 
     if (error instanceof CustomerNotFoundError) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     if (error instanceof CrmError) {
-      return res.status(error.statusCode).json({
+      res.status(error.statusCode).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     res.status(500).json({

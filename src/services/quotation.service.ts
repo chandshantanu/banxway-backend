@@ -354,7 +354,7 @@ export class QuotationService {
 
         // Check if weight falls in any slab
         const hasApplicableSlab = card.weight_slabs.some(
-          (slab) =>
+          (slab: any) =>
             chargeableWeight >= slab.min_kg &&
             (slab.max_kg === Infinity || chargeableWeight <= slab.max_kg)
         );

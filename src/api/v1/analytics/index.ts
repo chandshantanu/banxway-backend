@@ -150,9 +150,9 @@ router.get('/team-performance', requirePermission(Permission.VIEW_ANALYTICS), as
       .select('id, assigned_to, status, resolved_at, created_at');
 
     // Calculate stats per user
-    const teamStats = users?.filter(u => u.is_active).map(user => {
-      const userThreads = threads?.filter(t => t.assigned_to === user.id) || [];
-      const resolved = userThreads.filter(t => t.status === 'RESOLVED' || t.status === 'CLOSED');
+    const teamStats = users?.filter((u: any) => u.is_active).map((user: any) => {
+      const userThreads = threads?.filter((t: any) => t.assigned_to === user.id) || [];
+      const resolved = userThreads.filter((t: any) => t.status === 'RESOLVED' || t.status === 'CLOSED');
 
       return {
         id: user.id,
@@ -186,9 +186,9 @@ router.get('/sla', requirePermission(Permission.VIEW_ANALYTICS), async (req: Aut
 
     const slaStats = {
       total: threads?.length || 0,
-      withinSla: threads?.filter(t => t.sla_status === 'ON_TRACK' || t.sla_status === 'MET').length || 0,
-      atRisk: threads?.filter(t => t.sla_status === 'AT_RISK').length || 0,
-      breached: threads?.filter(t => t.sla_status === 'BREACHED').length || 0,
+      withinSla: threads?.filter((t: any) => t.sla_status === 'ON_TRACK' || t.sla_status === 'MET').length || 0,
+      atRisk: threads?.filter((t: any) => t.sla_status === 'AT_RISK').length || 0,
+      breached: threads?.filter((t: any) => t.sla_status === 'BREACHED').length || 0,
       complianceRate: 0,
     };
 
@@ -198,11 +198,11 @@ router.get('/sla', requirePermission(Permission.VIEW_ANALYTICS), async (req: Aut
 
     // SLA by priority
     const byPriority = {
-      critical: threads?.filter(t => t.priority === 'CRITICAL').length || 0,
-      urgent: threads?.filter(t => t.priority === 'URGENT').length || 0,
-      high: threads?.filter(t => t.priority === 'HIGH').length || 0,
-      medium: threads?.filter(t => t.priority === 'MEDIUM').length || 0,
-      low: threads?.filter(t => t.priority === 'LOW').length || 0,
+      critical: threads?.filter((t: any) => t.priority === 'CRITICAL').length || 0,
+      urgent: threads?.filter((t: any) => t.priority === 'URGENT').length || 0,
+      high: threads?.filter((t: any) => t.priority === 'HIGH').length || 0,
+      medium: threads?.filter((t: any) => t.priority === 'MEDIUM').length || 0,
+      low: threads?.filter((t: any) => t.priority === 'LOW').length || 0,
     };
 
     res.json({
@@ -262,9 +262,9 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
     const urgentThreads = urgentThreadsResult.data;
 
     const urgentByChannel = {
-      email: urgentThreads?.filter(t => t.primary_channel === 'EMAIL').length || 0,
-      whatsapp: urgentThreads?.filter(t => t.primary_channel === 'WHATSAPP').length || 0,
-      phone: urgentThreads?.filter(t => t.primary_channel === 'VOICE').length || 0,
+      email: urgentThreads?.filter((t: any) => t.primary_channel === 'EMAIL').length || 0,
+      whatsapp: urgentThreads?.filter((t: any) => t.primary_channel === 'WHATSAPP').length || 0,
+      phone: urgentThreads?.filter((t: any) => t.primary_channel === 'VOICE').length || 0,
     };
 
     // Format recent activity
@@ -352,14 +352,14 @@ router.get('/reports', requirePermission(Permission.VIEW_REPORTS), async (req: A
         summary: {
           threadsCreated: threads?.length || 0,
           messagesProcessed: messages?.length || 0,
-          inboundMessages: messages?.filter(m => m.direction === 'INBOUND').length || 0,
-          outboundMessages: messages?.filter(m => m.direction === 'OUTBOUND').length || 0,
+          inboundMessages: messages?.filter((m: any) => m.direction === 'INBOUND').length || 0,
+          outboundMessages: messages?.filter((m: any) => m.direction === 'OUTBOUND').length || 0,
         },
         channelBreakdown: {
-          email: messages?.filter(m => m.channel === 'EMAIL').length || 0,
-          whatsapp: messages?.filter(m => m.channel === 'WHATSAPP').length || 0,
-          sms: messages?.filter(m => m.channel === 'SMS').length || 0,
-          voice: messages?.filter(m => m.channel === 'VOICE').length || 0,
+          email: messages?.filter((m: any) => m.channel === 'EMAIL').length || 0,
+          whatsapp: messages?.filter((m: any) => m.channel === 'WHATSAPP').length || 0,
+          sms: messages?.filter((m: any) => m.channel === 'SMS').length || 0,
+          voice: messages?.filter((m: any) => m.channel === 'VOICE').length || 0,
         },
       },
     });

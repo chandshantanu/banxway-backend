@@ -54,7 +54,8 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     const agent = await agentBuilderService.getAgent(req.params.id);
     if (!agent) {
-      return res.status(404).json({ success: false, error: 'Agent not found' });
+      res.status(404).json({ success: false, error: 'Agent not found' });
+      return;
     }
     res.json({ success: true, data: agent });
   } catch (error) {

@@ -1,7 +1,8 @@
 import { Router, Response } from 'express';
 import { authenticateRequest, requirePermission, AuthenticatedRequest } from '../../../middleware/auth.middleware';
 import { Permission } from '../../../utils/permissions';
-import { supabaseAuth, supabaseAdmin } from '../../../config/database.config';
+import { supabaseAdmin } from '../../../config/database.config';
+const supabaseAuth: any = supabaseAdmin;
 import { logger } from '../../../utils/logger';
 import presenceRouter from './presence';
 
@@ -236,7 +237,7 @@ router.get('/', requirePermission(Permission.VIEW_USERS), async (req: Authentica
     }
 
     // Get assignment counts for each user
-    const userIds = data?.map(u => u.id) || [];
+    const userIds = data?.map((u: any) => u.id) || [];
     const { data: threadCounts } = await supabaseAdmin
       .from('communication_threads')
       .select('assigned_to')
@@ -244,13 +245,13 @@ router.get('/', requirePermission(Permission.VIEW_USERS), async (req: Authentica
       .in('status', ['NEW', 'IN_PROGRESS', 'AWAITING_CLIENT', 'AWAITING_INTERNAL']);
 
     const assignmentMap = new Map<string, number>();
-    threadCounts?.forEach(t => {
+    threadCounts?.forEach((t: any) => {
       const current = assignmentMap.get(t.assigned_to) || 0;
       assignmentMap.set(t.assigned_to, current + 1);
     });
 
     // Enrich users with stats
-    const enrichedUsers = data?.map(user => ({
+    const enrichedUsers = data?.map((user: any) => ({
       ...user,
       stats: {
         activeThreads: assignmentMap.get(user.id) || 0,
@@ -300,8 +301,8 @@ router.get('/:id', requirePermission(Permission.VIEW_USERS), async (req: Authent
 
     const stats = {
       totalAssigned: threads?.length || 0,
-      activeThreads: threads?.filter(t => ['NEW', 'IN_PROGRESS', 'AWAITING_CLIENT', 'AWAITING_INTERNAL'].includes(t.status)).length || 0,
-      resolvedThreads: threads?.filter(t => t.status === 'RESOLVED' || t.status === 'CLOSED').length || 0,
+      activeThreads: threads?.filter((t: any) => ['NEW', 'IN_PROGRESS', 'AWAITING_CLIENT', 'AWAITING_INTERNAL'].includes(t.status)).length || 0,
+      resolvedThreads: threads?.filter((t: any) => t.status === 'RESOLVED' || t.status === 'CLOSED').length || 0,
     };
 
     res.json({
@@ -597,14 +598,14 @@ router.get('/stats/summary', requirePermission(Permission.VIEW_USERS), async (re
 
     const stats = {
       total: users?.length || 0,
-      active: users?.filter(u => u.is_active).length || 0,
-      inactive: users?.filter(u => !u.is_active).length || 0,
+      active: users?.filter((u: any) => u.is_active).length || 0,
+      inactive: users?.filter((u: any) => !u.is_active).length || 0,
       byRole: {
-        admin: users?.filter(u => u.role === 'admin').length || 0,
-        manager: users?.filter(u => u.role === 'manager').length || 0,
-        validator: users?.filter(u => u.role === 'validator').length || 0,
-        support: users?.filter(u => u.role === 'support').length || 0,
-        viewer: users?.filter(u => u.role === 'viewer').length || 0,
+        admin: users?.filter((u: any) => u.role === 'admin').length || 0,
+        manager: users?.filter((u: any) => u.role === 'manager').length || 0,
+        validator: users?.filter((u: any) => u.role === 'validator').length || 0,
+        support: users?.filter((u: any) => u.role === 'support').length || 0,
+        viewer: users?.filter((u: any) => u.role === 'viewer').length || 0,
       },
     };
 

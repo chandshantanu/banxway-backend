@@ -25,7 +25,7 @@ function getRedisConfig() {
     logger.warn(`Config file not available: ${error.message}`);
 
     // Require explicit REDIS_URL env var — no hardcoded fallbacks
-    _redisUrl = process.env.REDIS_URL;
+    _redisUrl = process.env.REDIS_URL ?? null;
 
     if (!_redisUrl) {
       const password = process.env.REDIS_PASSWORD || process.env.AZURE_REDIS_PASSWORD;

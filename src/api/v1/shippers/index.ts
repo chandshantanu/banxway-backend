@@ -64,10 +64,11 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
     });
   } catch (error: any) {
     if (error.message === 'Shipper not found') {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     logger.error('Failed to get shipper', { error: error.message });
@@ -96,10 +97,11 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
       error.message.includes('already exists') ||
       error.message.includes('Invalid email')
     ) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     logger.error('Failed to create shipper', { error: error.message });
@@ -125,17 +127,19 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
     });
   } catch (error: any) {
     if (error.message === 'Shipper not found') {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     if (error.message.includes('Invalid email')) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     logger.error('Failed to update shipper', { error: error.message });
@@ -161,10 +165,11 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
     });
   } catch (error: any) {
     if (error.message === 'Shipper not found') {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     logger.error('Failed to delete shipper', { error: error.message });
@@ -191,10 +196,11 @@ router.patch('/:id/activate', async (req: AuthenticatedRequest, res: Response) =
     });
   } catch (error: any) {
     if (error.message === 'Shipper not found') {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     logger.error('Failed to activate shipper', { error: error.message });
@@ -221,10 +227,11 @@ router.patch('/:id/deactivate', async (req: AuthenticatedRequest, res: Response)
     });
   } catch (error: any) {
     if (error.message === 'Shipper not found') {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: error.message,
       });
+      return;
     }
 
     logger.error('Failed to deactivate shipper', { error: error.message });

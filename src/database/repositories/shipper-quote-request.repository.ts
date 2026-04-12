@@ -313,7 +313,7 @@ export class ShipperQuoteRequestRepository {
         const marginAmount =
           (updates.shipper_quote_amount * request.margin_percentage) / 100 +
           request.margin_flat_fee;
-        updates['final_quote_amount'] = updates.shipper_quote_amount + marginAmount;
+        (updates as any)['final_quote_amount'] = updates.shipper_quote_amount + marginAmount;
       }
     }
 

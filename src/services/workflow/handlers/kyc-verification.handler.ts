@@ -125,10 +125,10 @@ export class KYCVerificationHandler {
             .eq('customer_id', customerId)
             .in('document_type', requiredDocs);
 
-        const approvedDocs = documents?.filter((doc) => doc.status === 'APPROVED') || [];
-        const pendingDocs = documents?.filter((doc) => doc.status === 'PENDING') || [];
+        const approvedDocs = documents?.filter((doc: any) => doc.status === 'APPROVED') || [];
+        const pendingDocs = documents?.filter((doc: any) => doc.status === 'PENDING') || [];
 
-        const approvedTypes = approvedDocs.map((d) => d.document_type);
+        const approvedTypes = approvedDocs.map((d: any) => d.document_type);
         const missingTypes = requiredDocs.filter((type) => !approvedTypes.includes(type));
 
         // Check if all required documents are approved

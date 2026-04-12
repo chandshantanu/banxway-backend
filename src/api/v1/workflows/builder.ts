@@ -89,8 +89,10 @@ router.get('/', async (req: AuthenticatedRequest, res: Response) => {
       query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
     }
 
-    const from = (pagination.page - 1) * pagination.limit;
-    const to = from + pagination.limit - 1;
+    const page = pagination.page ?? 1;
+    const limit = pagination.limit ?? 20;
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
 
     query = query
       .order(pagination.sortBy || 'created_at', { ascending: pagination.sortOrder === 'asc' })
@@ -104,10 +106,10 @@ router.get('/', async (req: AuthenticatedRequest, res: Response) => {
       success: true,
       data,
       meta: {
-        page: pagination.page,
-        limit: pagination.limit,
+        page,
+        limit,
         total: count || 0,
-        totalPages: Math.ceil((count || 0) / pagination.limit),
+        totalPages: Math.ceil((count || 0) / limit),
       },
     };
 
@@ -162,13 +164,14 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
       .single();
 
     if (error || !data) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: {
           code: 'NOT_FOUND',
           message: 'Workflow not found',
         },
       });
+      return;
     }
 
     const response: ApiResponse = {
@@ -274,10 +277,11 @@ router.post('/:id/duplicate', async (req: AuthenticatedRequest, res: Response) =
       .single();
 
     if (!original) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: { code: 'NOT_FOUND', message: 'Workflow not found' },
       });
+      return;
     }
 
     // Create duplicate
@@ -360,8 +364,10 @@ router.get('/instances', async (req: AuthenticatedRequest, res: Response) => {
       query = query.eq('entityType', entityType);
     }
 
-    const from = (pagination.page - 1) * pagination.limit;
-    const to = from + pagination.limit - 1;
+    const page = pagination.page ?? 1;
+    const limit = pagination.limit ?? 20;
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
 
     query = query
       .order('created_at', { ascending: false })
@@ -375,10 +381,10 @@ router.get('/instances', async (req: AuthenticatedRequest, res: Response) => {
       success: true,
       data,
       meta: {
-        page: pagination.page,
-        limit: pagination.limit,
+        page,
+        limit,
         total: count || 0,
-        totalPages: Math.ceil((count || 0) / pagination.limit),
+        totalPages: Math.ceil((count || 0) / limit),
       },
     };
 
@@ -399,10 +405,11 @@ router.get('/instances/:id', async (req: AuthenticatedRequest, res: Response) =>
       .single();
 
     if (error || !data) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: { code: 'NOT_FOUND', message: 'Workflow instance not found' },
       });
+      return;
     }
 
     const response: ApiResponse = {
@@ -451,11 +458,12 @@ router.post('/auto-assign/:shipmentId', async (req: AuthenticatedRequest, res: R
     });
 
     if (!result) {
-      return res.json({
+      res.json({
         success: true,
         data: null,
         message: 'No suitable workflow found above threshold',
       });
+      return;
     }
 
     const response: ApiResponse = {

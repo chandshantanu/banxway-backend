@@ -216,7 +216,7 @@ Return only the top 3 most relevant workflows.`;
 
       // Build context from messages
       const messageContext = messages
-        ?.map(m => m.ai_summary || m.content)
+        ?.map((m: any) => m.ai_summary || m.content)
         .join('\n');
 
       const matchRequest: WorkflowMatchRequest = {

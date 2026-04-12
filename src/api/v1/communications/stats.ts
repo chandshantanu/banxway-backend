@@ -29,16 +29,16 @@ router.get('/stats', requirePermission(Permission.VIEW_THREADS), asyncHandler(as
         const stats = {
             total: threads?.length || 0,
             by_status: {
-                open: threads?.filter(t => t.status === 'OPEN').length || 0,
-                in_progress: threads?.filter(t => t.status === 'IN_PROGRESS').length || 0,
-                pending: threads?.filter(t => t.status === 'PENDING_CUSTOMER').length || 0,
-                closed: threads?.filter(t => t.status === 'CLOSED').length || 0,
+                open: threads?.filter((t: any) => t.status === 'OPEN').length || 0,
+                in_progress: threads?.filter((t: any) => t.status === 'IN_PROGRESS').length || 0,
+                pending: threads?.filter((t: any) => t.status === 'PENDING_CUSTOMER').length || 0,
+                closed: threads?.filter((t: any) => t.status === 'CLOSED').length || 0,
             },
             by_priority: {
-                urgent: threads?.filter(t => t.priority === 'URGENT').length || 0,
-                high: threads?.filter(t => t.priority === 'HIGH').length || 0,
-                medium: threads?.filter(t => t.priority === 'MEDIUM').length || 0,
-                low: threads?.filter(t => t.priority === 'LOW').length || 0,
+                urgent: threads?.filter((t: any) => t.priority === 'URGENT').length || 0,
+                high: threads?.filter((t: any) => t.priority === 'HIGH').length || 0,
+                medium: threads?.filter((t: any) => t.priority === 'MEDIUM').length || 0,
+                low: threads?.filter((t: any) => t.priority === 'LOW').length || 0,
             },
         };
 

@@ -104,7 +104,7 @@ router.get('/stats', async (req: AuthenticatedRequest, res: Response) => {
       .limit(10000);
 
     if (!logs) {
-      return res.json({
+      res.json({
         success: true,
         data: {
           total_syncs: 0,
@@ -120,38 +120,39 @@ router.get('/stats', async (req: AuthenticatedRequest, res: Response) => {
           },
         },
       });
+      return;
     }
 
     const total_syncs = logs.length;
-    const successful_syncs = logs.filter((l) => l.status === 'success').length;
-    const failed_syncs = logs.filter((l) => l.status === 'failed').length;
-    const in_progress_syncs = logs.filter((l) => l.status === 'in_progress').length;
+    const successful_syncs = logs.filter((l: any) => l.status === 'success').length;
+    const failed_syncs = logs.filter((l: any) => l.status === 'failed').length;
+    const in_progress_syncs = logs.filter((l: any) => l.status === 'in_progress').length;
     const last_sync_at = logs.length > 0 ? logs[0].created_at : null;
 
     // Calculate stats by entity type
     const sync_by_entity = {
       USER: {
-        total: logs.filter((l) => l.entity_type === 'USER').length,
-        successful: logs.filter((l) => l.entity_type === 'USER' && l.status === 'success').length,
-        failed: logs.filter((l) => l.entity_type === 'USER' && l.status === 'failed').length,
+        total: logs.filter((l: any) => l.entity_type === 'USER').length,
+        successful: logs.filter((l: any) => l.entity_type === 'USER' && l.status === 'success').length,
+        failed: logs.filter((l: any) => l.entity_type === 'USER' && l.status === 'failed').length,
       },
       CUSTOMER: {
-        total: logs.filter((l) => l.entity_type === 'CUSTOMER').length,
-        successful: logs.filter((l) => l.entity_type === 'CUSTOMER' && l.status === 'success')
+        total: logs.filter((l: any) => l.entity_type === 'CUSTOMER').length,
+        successful: logs.filter((l: any) => l.entity_type === 'CUSTOMER' && l.status === 'success')
           .length,
-        failed: logs.filter((l) => l.entity_type === 'CUSTOMER' && l.status === 'failed').length,
+        failed: logs.filter((l: any) => l.entity_type === 'CUSTOMER' && l.status === 'failed').length,
       },
       CONTACT: {
-        total: logs.filter((l) => l.entity_type === 'CONTACT').length,
-        successful: logs.filter((l) => l.entity_type === 'CONTACT' && l.status === 'success')
+        total: logs.filter((l: any) => l.entity_type === 'CONTACT').length,
+        successful: logs.filter((l: any) => l.entity_type === 'CONTACT' && l.status === 'success')
           .length,
-        failed: logs.filter((l) => l.entity_type === 'CONTACT' && l.status === 'failed').length,
+        failed: logs.filter((l: any) => l.entity_type === 'CONTACT' && l.status === 'failed').length,
       },
       QUOTATION: {
-        total: logs.filter((l) => l.entity_type === 'QUOTATION').length,
-        successful: logs.filter((l) => l.entity_type === 'QUOTATION' && l.status === 'success')
+        total: logs.filter((l: any) => l.entity_type === 'QUOTATION').length,
+        successful: logs.filter((l: any) => l.entity_type === 'QUOTATION' && l.status === 'success')
           .length,
-        failed: logs.filter((l) => l.entity_type === 'QUOTATION' && l.status === 'failed').length,
+        failed: logs.filter((l: any) => l.entity_type === 'QUOTATION' && l.status === 'failed').length,
       },
     };
 
@@ -229,17 +230,19 @@ router.post('/user', requirePermission(Permission.MANAGE_INTEGRATIONS), async (r
     const { user_id } = req.body;
 
     if (!user_id) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'user_id is required',
       });
+      return;
     }
 
     if (process.env.ESPOCRM_ENABLED !== 'true') {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'EspoCRM integration is not enabled',
       });
+      return;
     }
 
     await crmSyncService.syncUserToEspo(user_id);
@@ -269,18 +272,20 @@ router.post('/customer', requirePermission(Permission.MANAGE_INTEGRATIONS), asyn
     const { customer_id } = req.body;
 
     if (!customer_id) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'customer_id is required',
       });
+      return;
     }
 
     // Check if EspoCRM is enabled
     if (process.env.ESPOCRM_ENABLED !== 'true') {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'EspoCRM integration is not enabled',
       });
+      return;
     }
 
     await crmSyncService.syncCustomerToEspo(customer_id);
@@ -310,17 +315,19 @@ router.post('/contact', requirePermission(Permission.MANAGE_INTEGRATIONS), async
     const { contact_id } = req.body;
 
     if (!contact_id) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'contact_id is required',
       });
+      return;
     }
 
     if (process.env.ESPOCRM_ENABLED !== 'true') {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'EspoCRM integration is not enabled',
       });
+      return;
     }
 
     await crmSyncService.syncContactToEspo(contact_id);
@@ -350,17 +357,19 @@ router.post('/quotation', requirePermission(Permission.MANAGE_INTEGRATIONS), asy
     const { quotation_id } = req.body;
 
     if (!quotation_id) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'quotation_id is required',
       });
+      return;
     }
 
     if (process.env.ESPOCRM_ENABLED !== 'true') {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'EspoCRM integration is not enabled',
       });
+      return;
     }
 
     await crmSyncService.syncQuotationToEspo(quotation_id);
@@ -390,17 +399,19 @@ router.post('/bulk-customers', requirePermission(Permission.MANAGE_INTEGRATIONS)
     const { customer_ids } = req.body;
 
     if (!customer_ids || !Array.isArray(customer_ids)) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'customer_ids array is required',
       });
+      return;
     }
 
     if (process.env.ESPOCRM_ENABLED !== 'true') {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'EspoCRM integration is not enabled',
       });
+      return;
     }
 
     let successful = 0;
@@ -442,10 +453,11 @@ router.post('/retry/:id', requirePermission(Permission.MANAGE_INTEGRATIONS), asy
     const { id } = req.params;
 
     if (process.env.ESPOCRM_ENABLED !== 'true') {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'EspoCRM integration is not enabled',
       });
+      return;
     }
 
     // Get the failed sync log
@@ -456,10 +468,11 @@ router.post('/retry/:id', requirePermission(Permission.MANAGE_INTEGRATIONS), asy
       .single();
 
     if (error || !syncLog) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Sync log not found',
       });
+      return;
     }
 
     // Retry based on entity type

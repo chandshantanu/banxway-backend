@@ -87,7 +87,8 @@ router.post(
                         message: result.error || 'Failed to submit entry',
                     },
                 };
-                return res.status(400).json(response);
+                res.status(400).json(response);
+                return;
             }
 
             // Resume workflow execution

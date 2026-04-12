@@ -44,7 +44,8 @@ router.get('/pending', async (req: Request, res: Response) => {
 
     if (error) {
       if (error.code === '42P01') {
-        return res.json({ success: true, data: [], count: 0 });
+        res.json({ success: true, data: [], count: 0 });
+        return;
       }
       throw error;
     }
@@ -84,7 +85,8 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return res.status(404).json({ success: false, error: 'Validation review not found' });
+        res.status(404).json({ success: false, error: 'Validation review not found' });
+        return;
       }
       throw error;
     }
@@ -123,7 +125,8 @@ router.post('/:id/approve', async (req: Request, res: Response) => {
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return res.status(404).json({ success: false, error: 'Validation review not found or already reviewed' });
+        res.status(404).json({ success: false, error: 'Validation review not found or already reviewed' });
+        return;
       }
       throw error;
     }
@@ -186,7 +189,8 @@ router.post('/:id/reject', async (req: Request, res: Response) => {
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return res.status(404).json({ success: false, error: 'Validation review not found or already reviewed' });
+        res.status(404).json({ success: false, error: 'Validation review not found or already reviewed' });
+        return;
       }
       throw error;
     }
@@ -225,7 +229,8 @@ router.post('/:id/revision', async (req: Request, res: Response) => {
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return res.status(404).json({ success: false, error: 'Validation review not found or already reviewed' });
+        res.status(404).json({ success: false, error: 'Validation review not found or already reviewed' });
+        return;
       }
       throw error;
     }

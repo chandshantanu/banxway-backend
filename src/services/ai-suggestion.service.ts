@@ -279,9 +279,9 @@ export class AISuggestionService {
 
             // Count by confidence levels
             const byConfidence = {
-                high: pending?.filter(s => s.confidence_score >= 0.90).length || 0,
-                medium: pending?.filter(s => s.confidence_score >= 0.70 && s.confidence_score < 0.90).length || 0,
-                low: pending?.filter(s => s.confidence_score < 0.70).length || 0,
+                high: pending?.filter((s: any) => s.confidence_score >= 0.90).length || 0,
+                medium: pending?.filter((s: any) => s.confidence_score >= 0.70 && s.confidence_score < 0.90).length || 0,
+                low: pending?.filter((s: any) => s.confidence_score < 0.70).length || 0,
             };
 
             // Get approval rate last 24h
@@ -291,7 +291,7 @@ export class AISuggestionService {
                 .select('status')
                 .gte('created_at', oneDayAgo);
 
-            const approved = last24h?.filter(s => s.status === 'APPROVED' || s.status === 'EDITED').length || 0;
+            const approved = last24h?.filter((s: any) => s.status === 'APPROVED' || s.status === 'EDITED').length || 0;
             const total = last24h?.length || 1;
             const approvalRate = approved / total;
 

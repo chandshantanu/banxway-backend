@@ -298,26 +298,26 @@ export class AnalyticsService {
         return this.getEmptyQuoteAnalytics();
       }
 
-      const inventoryCount = quotations.filter((q) => q.quote_source_mode === 'INVENTORY').length;
-      const onDemandCount = quotations.filter((q) => q.quote_source_mode === 'ON_DEMAND').length;
+      const inventoryCount = quotations.filter((q: any) => q.quote_source_mode === 'INVENTORY').length;
+      const onDemandCount = quotations.filter((q: any) => q.quote_source_mode === 'ON_DEMAND').length;
 
       const byStatus = {
-        draft: quotations.filter((q) => q.status === 'DRAFT').length,
-        sent: quotations.filter((q) => q.status === 'SENT').length,
-        accepted: quotations.filter((q) => q.status === 'ACCEPTED').length,
-        rejected: quotations.filter((q) => q.status === 'REJECTED').length,
-        expired: quotations.filter((q) => q.status === 'EXPIRED').length,
-        converted: quotations.filter((q) => q.status === 'CONVERTED').length,
+        draft: quotations.filter((q: any) => q.status === 'DRAFT').length,
+        sent: quotations.filter((q: any) => q.status === 'SENT').length,
+        accepted: quotations.filter((q: any) => q.status === 'ACCEPTED').length,
+        rejected: quotations.filter((q: any) => q.status === 'REJECTED').length,
+        expired: quotations.filter((q: any) => q.status === 'EXPIRED').length,
+        converted: quotations.filter((q: any) => q.status === 'CONVERTED').length,
       };
 
       const totalSent = byStatus.sent + byStatus.accepted + byStatus.rejected + byStatus.expired;
       const acceptanceRate = totalSent > 0 ? (byStatus.accepted / totalSent) * 100 : 0;
 
-      const totalCost = quotations.reduce((sum, q) => sum + (q.total_cost || 0), 0);
+      const totalCost = quotations.reduce((sum: number, q: any) => sum + (q.total_cost || 0), 0);
       const averageQuoteValue = quotations.length > 0 ? totalCost / quotations.length : 0;
 
-      const acceptedQuotations = quotations.filter((q) => q.status === 'ACCEPTED');
-      const totalRevenue = acceptedQuotations.reduce((sum, q) => sum + (q.total_cost || 0), 0);
+      const acceptedQuotations = quotations.filter((q: any) => q.status === 'ACCEPTED');
+      const totalRevenue = acceptedQuotations.reduce((sum: number, q: any) => sum + (q.total_cost || 0), 0);
 
       return {
         total_quotations: quotations.length,
@@ -380,8 +380,8 @@ export class AnalyticsService {
             id: rc.id,
             rate_card_number: rc.rate_card_number,
             shipper_name: rc.shipper_name || 'Unknown',
-            origin_airport: rc.origin_airport,
-            destination_airport: rc.destination_airport,
+            origin_airport: rc.origin_airport || '',
+            destination_airport: rc.destination_airport || '',
             valid_until: rc.valid_until,
             days_until_expiry: daysUntilExpiry,
             is_used_recently: !!lastUsedDate,
@@ -419,22 +419,22 @@ export class AnalyticsService {
       }
 
       // Filter quotations with margin data
-      const withMargin = quotations.filter((q) => q.margin_amount !== null && q.margin_amount !== undefined);
+      const withMargin = quotations.filter((q: any) => q.margin_amount !== null && q.margin_amount !== undefined);
 
       if (withMargin.length === 0) {
         return this.getEmptyMarginAnalysis();
       }
 
-      const totalMarginRevenue = withMargin.reduce((sum, q) => sum + (q.margin_amount || 0), 0);
-      const avgMarginPercentage = withMargin.reduce((sum, q) => sum + (q.margin_percentage || 0), 0) / withMargin.length;
+      const totalMarginRevenue = withMargin.reduce((sum: number, q: any) => sum + (q.margin_amount || 0), 0);
+      const avgMarginPercentage = withMargin.reduce((sum: number, q: any) => sum + (q.margin_percentage || 0), 0) / withMargin.length;
       const avgMarginAmount = totalMarginRevenue / withMargin.length;
 
       // By source mode
-      const inventoryQuotes = withMargin.filter((q) => q.quote_source_mode === 'INVENTORY');
-      const onDemandQuotes = withMargin.filter((q) => q.quote_source_mode === 'ON_DEMAND');
+      const inventoryQuotes = withMargin.filter((q: any) => q.quote_source_mode === 'INVENTORY');
+      const onDemandQuotes = withMargin.filter((q: any) => q.quote_source_mode === 'ON_DEMAND');
 
-      const inventoryMarginRevenue = inventoryQuotes.reduce((sum, q) => sum + (q.margin_amount || 0), 0);
-      const onDemandMarginRevenue = onDemandQuotes.reduce((sum, q) => sum + (q.margin_amount || 0), 0);
+      const inventoryMarginRevenue = inventoryQuotes.reduce((sum: number, q: any) => sum + (q.margin_amount || 0), 0);
+      const onDemandMarginRevenue = onDemandQuotes.reduce((sum: number, q: any) => sum + (q.margin_amount || 0), 0);
 
       // By shipper (for on-demand quotes with shipper_quote_request_id)
       const byShipperMap = new Map<string, { shipper_name: string; quotations: any[] }>();
@@ -453,8 +453,8 @@ export class AnalyticsService {
       }
 
       const byShipper = Array.from(byShipperMap.entries()).map(([shipper_id, data]) => {
-        const marginRevenue = data.quotations.reduce((sum, q) => sum + (q.margin_amount || 0), 0);
-        const avgMargin = data.quotations.reduce((sum, q) => sum + (q.margin_percentage || 0), 0) / data.quotations.length;
+        const marginRevenue = data.quotations.reduce((sum: number, q: any) => sum + (q.margin_amount || 0), 0);
+        const avgMargin = data.quotations.reduce((sum: number, q: any) => sum + (q.margin_percentage || 0), 0) / data.quotations.length;
 
         return {
           shipper_id,
@@ -476,7 +476,7 @@ export class AnalyticsService {
           inventory: {
             count: inventoryQuotes.length,
             average_margin_percentage: inventoryQuotes.length > 0
-              ? Math.round((inventoryQuotes.reduce((sum, q) => sum + (q.margin_percentage || 0), 0) / inventoryQuotes.length) * 100) / 100
+              ? Math.round((inventoryQuotes.reduce((sum: number, q: any) => sum + (q.margin_percentage || 0), 0) / inventoryQuotes.length) * 100) / 100
               : 0,
             average_margin_amount: inventoryQuotes.length > 0
               ? Math.round((inventoryMarginRevenue / inventoryQuotes.length) * 100) / 100
@@ -486,7 +486,7 @@ export class AnalyticsService {
           on_demand: {
             count: onDemandQuotes.length,
             average_margin_percentage: onDemandQuotes.length > 0
-              ? Math.round((onDemandQuotes.reduce((sum, q) => sum + (q.margin_percentage || 0), 0) / onDemandQuotes.length) * 100) / 100
+              ? Math.round((onDemandQuotes.reduce((sum: number, q: any) => sum + (q.margin_percentage || 0), 0) / onDemandQuotes.length) * 100) / 100
               : 0,
             average_margin_amount: onDemandQuotes.length > 0
               ? Math.round((onDemandMarginRevenue / onDemandQuotes.length) * 100) / 100

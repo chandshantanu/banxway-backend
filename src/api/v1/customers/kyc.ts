@@ -96,8 +96,8 @@ router.get(
 
         // Calculate overall status
         const requiredDocs = ['PAN_CARD', 'GST_CERTIFICATE'];
-        const approvedDocs = documents?.filter(d => d.status === 'APPROVED') || [];
-        const approvedTypes = approvedDocs.map(d => d.document_type);
+        const approvedDocs = documents?.filter((d: any) => d.status === 'APPROVED') || [];
+        const approvedTypes = approvedDocs.map((d: any) => d.document_type);
         const missingDocs = requiredDocs.filter(type => !approvedTypes.includes(type));
 
         let overallStatus: 'APPROVED' | 'PENDING' | 'NOT_STARTED';
@@ -262,7 +262,7 @@ async function updateCustomerKYCStatus(customerId: string) {
         .eq('customer_id', customerId);
 
     const requiredDocs = ['PAN_CARD', 'GST_CERTIFICATE'];
-    const approvedCount = documents?.filter(d => d.status === 'APPROVED').length || 0;
+    const approvedCount = documents?.filter((d: any) => d.status === 'APPROVED').length || 0;
 
     let kycStatus: 'APPROVED' | 'PENDING' | 'NOT_STARTED';
     if (approvedCount >= requiredDocs.length) {

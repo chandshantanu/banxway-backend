@@ -20,7 +20,8 @@ router.post('/ingestion-complete', async (req: Request, res: Response) => {
     const { agentId, channel, messageId, threadId, data, metadata } = req.body;
 
     if (!agentId || !threadId) {
-      return res.status(400).json({ success: false, error: 'agentId and threadId are required' });
+      res.status(400).json({ success: false, error: 'agentId and threadId are required' });
+      return;
     }
 
     logger.info('Ingestion complete webhook received', { agentId, channel, threadId, messageId });
@@ -48,7 +49,8 @@ router.post('/processing-complete', async (req: Request, res: Response) => {
     const { agentId, messageId, intent, entities, confidence, hasDocuments, documentUrls, metadata } = req.body;
 
     if (!agentId || !messageId) {
-      return res.status(400).json({ success: false, error: 'agentId and messageId are required' });
+      res.status(400).json({ success: false, error: 'agentId and messageId are required' });
+      return;
     }
 
     logger.info('Processing complete webhook received', {
@@ -78,7 +80,8 @@ router.post('/extraction-complete', async (req: Request, res: Response) => {
     const { agentId, documentId, documentType, threadId, extractedFields, confidence, metadata } = req.body;
 
     if (!agentId || !documentId) {
-      return res.status(400).json({ success: false, error: 'agentId and documentId are required' });
+      res.status(400).json({ success: false, error: 'agentId and documentId are required' });
+      return;
     }
 
     logger.info('Document extraction complete webhook received', {
@@ -109,7 +112,8 @@ router.post('/business-result', async (req: Request, res: Response) => {
     const { agentId, resultType, entityId, threadId, shipmentData, quoteData, metadata } = req.body;
 
     if (!agentId || !entityId) {
-      return res.status(400).json({ success: false, error: 'agentId and entityId are required' });
+      res.status(400).json({ success: false, error: 'agentId and entityId are required' });
+      return;
     }
 
     logger.info('Business result webhook received', { agentId, resultType, entityId });
@@ -137,7 +141,8 @@ router.post('/validation-required', async (req: Request, res: Response) => {
     const { agentId, shipmentRequestId, priority, reason, data, metadata } = req.body;
 
     if (!agentId || !shipmentRequestId) {
-      return res.status(400).json({ success: false, error: 'agentId and shipmentRequestId are required' });
+      res.status(400).json({ success: false, error: 'agentId and shipmentRequestId are required' });
+      return;
     }
 
     logger.info('Validation required webhook received', {
@@ -180,7 +185,8 @@ router.post('/correlation-complete', async (req: Request, res: Response) => {
     } = req.body;
 
     if (!agentId || !threadId) {
-      return res.status(400).json({ success: false, error: 'agentId and threadId are required' });
+      res.status(400).json({ success: false, error: 'agentId and threadId are required' });
+      return;
     }
 
     logger.info('Correlation complete webhook received', {
@@ -214,11 +220,13 @@ router.post('/validation-complete', async (req: Request, res: Response) => {
     const { agentId, shipmentRequestId, decision, validatedBy, validationType, notes, metadata } = req.body;
 
     if (!agentId || !shipmentRequestId || !decision) {
-      return res.status(400).json({ success: false, error: 'agentId, shipmentRequestId, and decision are required' });
+      res.status(400).json({ success: false, error: 'agentId, shipmentRequestId, and decision are required' });
+      return;
     }
 
     if (!['approved', 'rejected', 'revision_needed'].includes(decision)) {
-      return res.status(400).json({ success: false, error: 'decision must be approved, rejected, or revision_needed' });
+      res.status(400).json({ success: false, error: 'decision must be approved, rejected, or revision_needed' });
+      return;
     }
 
     logger.info('Validation complete webhook received', {

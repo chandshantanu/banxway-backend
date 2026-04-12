@@ -14,10 +14,11 @@ router.get('/', authenticateRequest, async (req: AuthenticatedRequest, res: Resp
     const { threadId } = req.query;
 
     if (!threadId || typeof threadId !== 'string') {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'threadId query parameter is required',
       });
+      return;
     }
 
     const notes = await noteRepository.findByThreadId(threadId);
@@ -45,10 +46,11 @@ router.post('/', authenticateRequest, async (req: AuthenticatedRequest, res: Res
     const { thread_id, content, is_pinned } = req.body;
 
     if (!thread_id || !content) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'thread_id and content are required',
       });
+      return;
     }
 
     const note = await noteRepository.create({ thread_id, content, is_pinned }, req.user!.id);

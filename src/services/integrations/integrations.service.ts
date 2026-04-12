@@ -308,7 +308,7 @@ export class IntegrationsService {
       if (fetchError) throw fetchError;
 
       // Add virtual number if not exists
-      if (!existingNumbers?.some(n => n.phone_number === credentials.virtual_number)) {
+      if (!existingNumbers?.some((n: any) => n.phone_number === credentials.virtual_number)) {
         const { error: insertError } = await supabaseAdmin
           .from('organization_phone_numbers')
           .insert({

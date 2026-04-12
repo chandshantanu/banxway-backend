@@ -73,7 +73,8 @@ router.get('/', requirePermission(Permission.VIEW_DOCUMENTS), async (req: Authen
 
     if (error) {
       if (error.code === '42P01') {
-        return res.json({ success: true, data: [], count: 0 });
+        res.json({ success: true, data: [], count: 0 });
+        return;
       }
       throw error;
     }
@@ -93,7 +94,8 @@ router.post('/upload', requirePermission(Permission.UPLOAD_DOCUMENTS), upload.si
   try {
     const file = req.file;
     if (!file) {
-      return res.status(400).json({ success: false, error: 'No file provided' });
+      res.status(400).json({ success: false, error: 'No file provided' });
+      return;
     }
 
     const { thread_id, shipment_id } = req.body;
@@ -169,7 +171,8 @@ router.get('/:id', requirePermission(Permission.VIEW_DOCUMENTS), async (req: Aut
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return res.status(404).json({ success: false, error: 'Document not found' });
+        res.status(404).json({ success: false, error: 'Document not found' });
+        return;
       }
       throw error;
     }

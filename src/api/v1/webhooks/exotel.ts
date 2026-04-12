@@ -177,7 +177,7 @@ async function processCallWebhook(payload: ExotelWebhookPayload): Promise<void> 
 
     // Find or create communication thread
     const phoneNumber = payload.Direction === 'inbound' ? payload.From : payload.To;
-    const thread = await findOrCreateThreadByPhone(phoneNumber);
+    const thread = await findOrCreateThreadByPhone(phoneNumber || '');
 
     if (!message && thread) {
       // Create new message record for the call
@@ -231,7 +231,7 @@ async function processCallWebhook(payload: ExotelWebhookPayload): Promise<void> 
           messageId: message.id,
           threadId: thread.id,
           audioUrl: payload.RecordingUrl,
-          callSid: payload.CallSid,
+          callSid: payload.CallSid || '',
         });
 
         logger.info('Transcription queued for call', {

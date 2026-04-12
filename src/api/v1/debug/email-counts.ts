@@ -22,11 +22,11 @@ router.get('/email-counts', asyncHandler(async (req: AuthenticatedRequest, res: 
         .not('external_id', 'is', null);
 
     // Count unique external_ids
-    const uniqueExternalIds = new Set(messagesWithExtId?.map(m => m.external_id) || []);
+    const uniqueExternalIds = new Set(messagesWithExtId?.map((m: any) => m.external_id) || []);
 
     // Find duplicates
     const externalIdCounts: Record<string, number> = {};
-    messagesWithExtId?.forEach(m => {
+    messagesWithExtId?.forEach((m: any) => {
         if (m.external_id) {
             externalIdCounts[m.external_id] = (externalIdCounts[m.external_id] || 0) + 1;
         }
@@ -49,7 +49,7 @@ router.get('/email-counts', asyncHandler(async (req: AuthenticatedRequest, res: 
         .select('channel, direction');
 
     const breakdown: Record<string, Record<string, number>> = {};
-    channelBreakdown?.forEach(m => {
+    channelBreakdown?.forEach((m: any) => {
         const channel = m.channel || 'UNKNOWN';
         const direction = m.direction || 'UNKNOWN';
         if (!breakdown[channel]) breakdown[channel] = {};
