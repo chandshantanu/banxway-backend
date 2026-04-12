@@ -8,95 +8,102 @@ import analyticsService from '../../../services/analytics.service';
 const router = Router();
 router.use(authenticateRequest);
 
+// Helper: run a query but return empty/zero on error (graceful degradation for missing tables)
+async function safeQuery<T>(query: any): Promise<{ data: T | null; count: number }> {
+  try {
+    const result = await query;
+    if (result.error) {
+      logger.debug('Analytics query failed (non-fatal)', { error: result.error.message });
+      return { data: null, count: 0 };
+    }
+    return { data: result.data, count: result.count ?? 0 };
+  } catch {
+    return { data: null, count: 0 };
+  }
+}
+
 // Get dashboard stats - main stats for the dashboard
 router.get('/dashboard', requirePermission(Permission.VIEW_ANALYTICS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    // Get shipment stats
-    const { data: shipments, error: shipmentError } = await supabaseAdmin
-      .from('shipments')
-      .select('id, status');
-
-    if (shipmentError) {
-      logger.error('Error fetching shipments for analytics', { error: shipmentError });
-    }
-
-    const shipmentStats = {
-      total: shipments?.length || 0,
-      inTransit: shipments?.filter(s => s.status === 'IN_TRANSIT').length || 0,
-      pending: shipments?.filter(s => ['DRAFT', 'PENDING', 'BOOKED'].includes(s.status)).length || 0,
-      delivered: shipments?.filter(s => s.status === 'DELIVERED').length || 0,
-      exceptions: shipments?.filter(s => s.status === 'EXCEPTION').length || 0,
-    };
-
-    // Get thread stats
-    const { data: threads, error: threadError } = await supabaseAdmin
-      .from('communication_threads')
-      .select('id, status, priority, primary_channel, sla_status, created_at');
-
-    if (threadError) {
-      logger.error('Error fetching threads for analytics', { error: threadError });
-    }
-
-    const threadStats = {
-      total: threads?.length || 0,
-      open: threads?.filter(t => ['NEW', 'IN_PROGRESS', 'AWAITING_CLIENT', 'AWAITING_INTERNAL'].includes(t.status)).length || 0,
-      resolved: threads?.filter(t => t.status === 'RESOLVED').length || 0,
-      closed: threads?.filter(t => t.status === 'CLOSED').length || 0,
-      highPriority: threads?.filter(t => ['HIGH', 'URGENT', 'CRITICAL'].includes(t.priority)).length || 0,
-      slaBreach: threads?.filter(t => t.sla_status === 'BREACHED').length || 0,
-    };
-
-    // Get channel breakdown
-    const channelBreakdown = {
-      email: threads?.filter(t => t.primary_channel === 'EMAIL').length || 0,
-      whatsapp: threads?.filter(t => t.primary_channel === 'WHATSAPP').length || 0,
-      sms: threads?.filter(t => t.primary_channel === 'SMS').length || 0,
-      voice: threads?.filter(t => t.primary_channel === 'VOICE').length || 0,
-      portal: threads?.filter(t => t.primary_channel === 'PORTAL').length || 0,
-    };
-
-    // Get message stats
-    const { count: messageCount } = await supabaseAdmin
-      .from('communication_messages')
-      .select('*', { count: 'exact' });
-
-    // Get customer stats
-    const { count: customerCount } = await supabaseAdmin
-      .from('customers')
-      .select('*', { count: 'exact' });
-
-    // Get user stats
-    const { data: users } = await supabaseAdmin
-      .from('users')
-      .select('id, role, is_active');
-
-    const userStats = {
-      total: users?.length || 0,
-      active: users?.filter(u => u.is_active).length || 0,
-      byRole: {
-        admin: users?.filter(u => u.role === 'admin').length || 0,
-        manager: users?.filter(u => u.role === 'manager').length || 0,
-        validator: users?.filter(u => u.role === 'validator').length || 0,
-        support: users?.filter(u => u.role === 'support').length || 0,
-        viewer: users?.filter(u => u.role === 'viewer').length || 0,
-      }
-    };
-
-    // Get recent activity (last 7 days trend)
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const { data: recentThreads } = await supabaseAdmin
-      .from('communication_threads')
-      .select('created_at')
-      .gte('created_at', sevenDaysAgo.toISOString());
+    // Run all queries in parallel — each wrapped in safeQuery so a missing table
+    // doesn't 500 the entire dashboard
+    const [
+      shipmentsResult,
+      threadsResult,
+      messageCountResult,
+      customerCountResult,
+      usersResult,
+      recentThreadsResult,
+      quotationsResult,
+      crmLeadsResult,
+    ] = await Promise.all([
+      safeQuery(supabaseAdmin.from('shipments').select('id, status')),
+      safeQuery(supabaseAdmin.from('communication_threads').select('id, status, priority, primary_channel, sla_status, lead_classification, crm_customer_id, created_at')),
+      safeQuery(supabaseAdmin.from('communication_messages').select('*', { count: 'exact' })),
+      safeQuery(supabaseAdmin.from('crm_customers').select('*', { count: 'exact' })),
+      safeQuery(supabaseAdmin.from('users').select('id, role, is_active')),
+      safeQuery(supabaseAdmin.from('communication_threads').select('created_at').gte('created_at', sevenDaysAgo.toISOString())),
+      safeQuery(supabaseAdmin.from('quotations').select('id, status', { count: 'exact' })),
+      safeQuery(supabaseAdmin.from('crm_customers').select('id').eq('status', 'LEAD')),
+    ]);
+
+    const shipments = (shipmentsResult.data as any[]) || [];
+    const threads = (threadsResult.data as any[]) || [];
+    const users = (usersResult.data as any[]) || [];
+    const recentThreads = (recentThreadsResult.data as any[]) || [];
+    const quotations = (quotationsResult.data as any[]) || [];
+
+    const shipmentStats = {
+      total: shipments.length,
+      inTransit: shipments.filter(s => s.status === 'IN_TRANSIT').length,
+      pending: shipments.filter(s => ['DRAFT', 'PENDING', 'BOOKED'].includes(s.status)).length,
+      delivered: shipments.filter(s => s.status === 'DELIVERED').length,
+      exceptions: shipments.filter(s => s.status === 'EXCEPTION').length,
+    };
+
+    const threadStats = {
+      total: threads.length,
+      open: threads.filter(t => ['NEW', 'IN_PROGRESS', 'AWAITING_CLIENT', 'AWAITING_INTERNAL'].includes(t.status)).length,
+      resolved: threads.filter(t => t.status === 'RESOLVED').length,
+      closed: threads.filter(t => t.status === 'CLOSED').length,
+      highPriority: threads.filter(t => ['HIGH', 'URGENT', 'CRITICAL'].includes(t.priority)).length,
+      slaBreach: threads.filter(t => t.sla_status === 'BREACHED').length,
+      // New: lead classification breakdown
+      newLeads: threads.filter(t => t.lead_classification === 'new_lead').length,
+      existingCustomers: threads.filter(t => t.lead_classification === 'existing_customer').length,
+      existingShipments: threads.filter(t => t.lead_classification === 'existing_shipment').length,
+      linkedToCrm: threads.filter(t => t.crm_customer_id).length,
+    };
+
+    const channelBreakdown = {
+      email: threads.filter(t => t.primary_channel === 'EMAIL').length,
+      whatsapp: threads.filter(t => t.primary_channel === 'WHATSAPP').length,
+      sms: threads.filter(t => t.primary_channel === 'SMS').length,
+      voice: threads.filter(t => t.primary_channel === 'VOICE').length,
+      portal: threads.filter(t => t.primary_channel === 'PORTAL').length,
+    };
+
+    const userStats = {
+      total: users.length,
+      active: users.filter(u => u.is_active).length,
+      byRole: {
+        admin: users.filter(u => u.role === 'admin').length,
+        manager: users.filter(u => u.role === 'manager').length,
+        validator: users.filter(u => u.role === 'validator').length,
+        support: users.filter(u => u.role === 'support').length,
+        viewer: users.filter(u => u.role === 'viewer').length,
+      }
+    };
 
     // Group by day
     const dailyTrend = Array.from({ length: 7 }, (_, i) => {
       const date = new Date();
       date.setDate(date.getDate() - (6 - i));
       const dateStr = date.toISOString().split('T')[0];
-      const count = recentThreads?.filter(t => t.created_at.startsWith(dateStr)).length || 0;
+      const count = recentThreads.filter(t => t.created_at?.startsWith(dateStr)).length;
       return { date: dateStr, count };
     });
 
@@ -106,8 +113,15 @@ router.get('/dashboard', requirePermission(Permission.VIEW_ANALYTICS), async (re
         shipments: shipmentStats,
         threads: threadStats,
         channels: channelBreakdown,
-        messages: { total: messageCount || 0 },
-        customers: { total: customerCount || 0 },
+        messages: { total: messageCountResult.count || 0 },
+        customers: { total: customerCountResult.count || 0 },
+        leads: { total: (crmLeadsResult.data as any[])?.length || 0 },
+        quotations: {
+          total: quotations.length,
+          draft: quotations.filter(q => q.status === 'DRAFT').length,
+          sent: quotations.filter(q => q.status === 'SENT').length,
+          accepted: quotations.filter(q => q.status === 'ACCEPTED').length,
+        },
         users: userStats,
         trend: dailyTrend,
         lastUpdated: new Date().toISOString(),
@@ -208,82 +222,41 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
     const oneHourAgo = new Date();
     oneHourAgo.setHours(oneHourAgo.getHours() - 24); // Get last 24 hours
 
-    // Get email messages
-    const { data: emailMessages } = await supabaseAdmin
-      .from('communication_messages')
-      .select('id, from_address, subject, created_at, read_at, thread_id')
-      .eq('channel', 'EMAIL')
-      .eq('direction', 'INBOUND')
-      .order('created_at', { ascending: false })
-      .limit(10);
+    // Run all queries in parallel
+    const [
+      emailMessagesResult,
+      whatsappMessagesResult,
+      phoneMessagesResult,
+      emailTotalResult,
+      emailUnreadResult,
+      whatsappTotalResult,
+      whatsappUnreadResult,
+      phoneTotalResult,
+      phoneUnreadResult,
+      urgentThreadsResult,
+    ] = await Promise.all([
+      supabaseAdmin.from('communication_messages').select('id, from_address, subject, created_at, read_at, thread_id').eq('channel', 'EMAIL').eq('direction', 'INBOUND').order('created_at', { ascending: false }).limit(10),
+      supabaseAdmin.from('communication_messages').select('id, from_address, subject, created_at, read_at, thread_id').eq('channel', 'WHATSAPP').eq('direction', 'INBOUND').order('created_at', { ascending: false }).limit(10),
+      supabaseAdmin.from('communication_messages').select('id, from_address, subject, created_at, read_at, thread_id').eq('channel', 'VOICE').eq('direction', 'INBOUND').order('created_at', { ascending: false }).limit(10),
+      supabaseAdmin.from('communication_messages').select('*', { count: 'exact' }).eq('channel', 'EMAIL'),
+      supabaseAdmin.from('communication_messages').select('*', { count: 'exact' }).eq('channel', 'EMAIL').is('read_at', null),
+      supabaseAdmin.from('communication_messages').select('*', { count: 'exact' }).eq('channel', 'WHATSAPP'),
+      supabaseAdmin.from('communication_messages').select('*', { count: 'exact' }).eq('channel', 'WHATSAPP').is('read_at', null),
+      supabaseAdmin.from('communication_messages').select('*', { count: 'exact' }).eq('channel', 'VOICE'),
+      supabaseAdmin.from('communication_messages').select('*', { count: 'exact' }).eq('channel', 'VOICE').is('read_at', null),
+      supabaseAdmin.from('communication_threads').select('id, primary_channel').in('priority', ['HIGH', 'URGENT', 'CRITICAL']).not('status', 'in', '("RESOLVED","CLOSED")'),
+    ]);
 
-    // Get WhatsApp messages
-    const { data: whatsappMessages } = await supabaseAdmin
-      .from('communication_messages')
-      .select('id, from_address, subject, created_at, read_at, thread_id')
-      .eq('channel', 'WHATSAPP')
-      .eq('direction', 'INBOUND')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    // Get Voice/Phone messages
-    const { data: phoneMessages } = await supabaseAdmin
-      .from('communication_messages')
-      .select('id, from_address, subject, created_at, read_at, thread_id')
-      .eq('channel', 'VOICE')
-      .eq('direction', 'INBOUND')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    // Get SMS messages
-    const { data: smsMessages } = await supabaseAdmin
-      .from('communication_messages')
-      .select('id, from_address, subject, created_at, read_at, thread_id')
-      .eq('channel', 'SMS')
-      .eq('direction', 'INBOUND')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    // Get counts per channel
-    const { count: emailTotal } = await supabaseAdmin
-      .from('communication_messages')
-      .select('*', { count: 'exact' })
-      .eq('channel', 'EMAIL');
-
-    const { count: emailUnread } = await supabaseAdmin
-      .from('communication_messages')
-      .select('*', { count: 'exact' })
-      .eq('channel', 'EMAIL')
-      .is('read_at', null);
-
-    const { count: whatsappTotal } = await supabaseAdmin
-      .from('communication_messages')
-      .select('*', { count: 'exact' })
-      .eq('channel', 'WHATSAPP');
-
-    const { count: whatsappUnread } = await supabaseAdmin
-      .from('communication_messages')
-      .select('*', { count: 'exact' })
-      .eq('channel', 'WHATSAPP')
-      .is('read_at', null);
-
-    const { count: phoneTotal } = await supabaseAdmin
-      .from('communication_messages')
-      .select('*', { count: 'exact' })
-      .eq('channel', 'VOICE');
-
-    const { count: phoneUnread } = await supabaseAdmin
-      .from('communication_messages')
-      .select('*', { count: 'exact' })
-      .eq('channel', 'VOICE')
-      .is('read_at', null);
-
-    // Get urgent threads (high priority, not resolved)
-    const { data: urgentThreads } = await supabaseAdmin
-      .from('communication_threads')
-      .select('id, primary_channel')
-      .in('priority', ['HIGH', 'URGENT', 'CRITICAL'])
-      .not('status', 'in', '("RESOLVED","CLOSED")');
+    const emailMessages = emailMessagesResult.data;
+    const whatsappMessages = whatsappMessagesResult.data;
+    const phoneMessages = phoneMessagesResult.data;
+    const emailTotal = emailTotalResult.count;
+    const emailUnread = emailUnreadResult.count;
+    const whatsappTotal = whatsappTotalResult.count;
+    const whatsappUnread = whatsappUnreadResult.count;
+    const phoneTotal = phoneTotalResult.count;
+    const phoneUnread = phoneUnreadResult.count;
+    const urgentThreads = urgentThreadsResult.data;
 
     const urgentByChannel = {
       email: urgentThreads?.filter(t => t.primary_channel === 'EMAIL').length || 0,
@@ -310,8 +283,8 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
           total: emailTotal || 0,
           unread: emailUnread || 0,
           urgent: urgentByChannel.email,
-          avgResponseTime: null, // not yet computed
-          trend: 0,
+          avgResponseTime: null,
+          trend: emailTotal ? Math.round((emailUnread || 0) / emailTotal * 100) : 0,
           recentActivity: formatActivity(emailMessages),
         },
         whatsapp: {
@@ -319,7 +292,7 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
           unread: whatsappUnread || 0,
           urgent: urgentByChannel.whatsapp,
           avgResponseTime: null,
-          trend: 0,
+          trend: whatsappTotal ? Math.round((whatsappUnread || 0) / whatsappTotal * 100) : 0,
           recentActivity: formatActivity(whatsappMessages),
         },
         phone: {
@@ -327,7 +300,7 @@ router.get('/communications-stats', requirePermission(Permission.VIEW_ANALYTICS)
           unread: phoneUnread || 0,
           urgent: urgentByChannel.phone,
           avgResponseTime: null,
-          trend: 0,
+          trend: phoneTotal ? Math.round((phoneUnread || 0) / phoneTotal * 100) : 0,
           recentActivity: formatActivity(phoneMessages),
         },
       },
