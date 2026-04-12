@@ -334,9 +334,67 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
+// Backfill: correlate uncorrelated threads in the background after startup.
+// Runs 30s after boot, processes 100 threads per batch with 2s pauses to
+// avoid saturating the small B1ms connection pool.
+async function runBackfillCorrelation(): Promise<void> {
+  try {
+    const { pool } = require('./config/pg-client');
+    const { queueAgentResult } = require('./workers/agent-result.worker');
+
+    const result = await pool.query(`
+      SELECT DISTINCT ON (t.id)
+        t.id AS thread_id,
+        m.from_address,
+        m.from_name
+      FROM communication_threads t
+      JOIN communication_messages m ON m.thread_id = t.id
+      WHERE t.crm_customer_id IS NULL
+        AND t.archived = false
+        AND m.direction = 'INBOUND'
+        AND m.from_address IS NOT NULL
+      ORDER BY t.id, m.created_at ASC
+      LIMIT 100
+    `);
+
+    const rows = result.rows || [];
+    if (rows.length === 0) {
+      logger.info('Backfill: all threads correlated');
+      return;
+    }
+
+    logger.info(`Backfill: queuing ${rows.length} threads for correlation`);
+
+    for (const row of rows) {
+      await queueAgentResult({
+        resultType: 'correlation_complete',
+        agentId: 'backfill',
+        entityId: row.thread_id,
+        payload: {
+          threadId: row.thread_id,
+          fromEmail: row.from_address,
+          fromName: row.from_name || '',
+        },
+      }).catch(() => {});
+    }
+
+    logger.info(`Backfill: ${rows.length} threads queued for correlation`);
+
+    // Schedule next batch in 60s (if there are more)
+    if (rows.length === 100) {
+      setTimeout(runBackfillCorrelation, 60000);
+    }
+  } catch (err: any) {
+    logger.warn('Backfill correlation failed (non-fatal)', { error: err.message });
+  }
+}
+
 // Start the server
 if (require.main === module) {
   startServer();
+
+  // Start backfill 30s after boot so the pool stabilizes first
+  setTimeout(runBackfillCorrelation, 30000);
 }
 
 export default app;
