@@ -1,6 +1,6 @@
 import winston from 'winston';
 import Transport from 'winston-transport';
-import appInsights from 'applicationinsights';
+import * as appInsights from 'applicationinsights';
 import dotenv from 'dotenv';
 
 class AppInsightsTransport extends Transport {

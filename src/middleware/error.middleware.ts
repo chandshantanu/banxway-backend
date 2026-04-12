@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 import { ZodError } from 'zod';
-import appInsights from 'applicationinsights';
+import * as appInsights from 'applicationinsights';
 
 /**
  * Standard API Error Response
