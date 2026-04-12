@@ -88,9 +88,13 @@ export function isMcpEnabled(): boolean {
   return !!(AGENTBUILDER_CONFIG.connectionId || AGENTBUILDER_CONFIG.authToken);
 }
 
-/** Refresh the AgentBuilder auth token using Chatslytics Supabase credentials */
+/** Refresh the AgentBuilder auth token using Chatslytics GoTrue credentials.
+ *  Auth migrated from Supabase Cloud → self-hosted GoTrue on 2026-04-08.
+ *  GoTrue is exposed at agentsapi.chatslytics.com/auth/v1 (same domain as API).
+ */
 async function refreshToken(): Promise<string> {
-  const supabaseUrl = process.env.CHATSLYTICS_SUPABASE_URL || 'https://jrhvznqscglthpcrqjyn.supabase.co';
+  // GoTrue is self-hosted at agentsapi.chatslytics.com — NOT the old Supabase Cloud URL
+  const supabaseUrl = process.env.CHATSLYTICS_GOTRUE_URL || process.env.CHATSLYTICS_SUPABASE_URL || 'https://agentsapi.chatslytics.com';
   const anonKey = process.env.CHATSLYTICS_SUPABASE_ANON_KEY || '';
   const email = process.env.CHATSLYTICS_AUTH_EMAIL || '';
   const password = process.env.CHATSLYTICS_AUTH_PASSWORD || '';
