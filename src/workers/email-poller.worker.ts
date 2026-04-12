@@ -12,6 +12,7 @@ import { logger } from '../utils/logger';
 import { Channel, MessageDirection, ThreadType } from '../types';
 import { io } from '../index';
 import { publishToKafka, KAFKA_TOPICS } from '../config/kafka.config';
+import { blobStorage, CONTAINERS, BlobStorageService } from '../services/storage/blob-storage.service';
 
 // Get Redis connection and queue (lazy initialization)
 const emailQueue = getEmailQueue();
@@ -368,7 +369,7 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
         cc_addresses: parsed.cc,
         external_id: parsed.messageId,
         external_thread_id: parsed.inReplyTo,
-        attachments: parsed.attachments,
+        attachments: await uploadAttachments(parsed.messageId, parsed.attachments),
         email_account_id: accountId,
       })
       .select()
@@ -453,6 +454,37 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
     logger.error('Error processing email', { accountId, error: error.message });
     throw error;
   }
+}
+
+/**
+ * Upload email attachments to Azure Blob Storage.
+ * Returns attachment metadata with blob URLs instead of raw buffers.
+ * Non-fatal: if blob upload fails, falls back to storing attachment metadata only.
+ */
+async function uploadAttachments(messageId: string, attachments: any[]): Promise<any[]> {
+  if (!attachments || attachments.length === 0) return [];
+
+  return Promise.all(
+    attachments.map(async (a: any) => {
+      const base = { filename: a.filename, contentType: a.contentType, size: a.size };
+      if (!a.content) return base;
+      try {
+        const blobName = BlobStorageService.emailAttachmentName(messageId, a.filename || 'attachment');
+        const url = await blobStorage.upload(
+          CONTAINERS.EMAIL_ATTACHMENTS,
+          blobName,
+          Buffer.isBuffer(a.content) ? a.content : Buffer.from(a.content),
+          a.contentType || 'application/octet-stream'
+        );
+        return { ...base, url };
+      } catch (err: any) {
+        logger.warn('Failed to upload email attachment to blob storage (non-fatal)', {
+          filename: a.filename, error: err.message,
+        });
+        return base;
+      }
+    })
+  );
 }
 
 async function findCustomerByEmail(email: string): Promise<any> {
