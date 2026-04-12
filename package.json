@@ -42,8 +42,9 @@
   "author": "Banxway",
   "license": "ISC",
   "dependencies": {
+    "@azure/storage-blob": "^12.27.0",
     "@huggingface/inference": "^2.6.4",
-    "@supabase/supabase-js": "^2.39.0",
+    "@sentry/node": "^10.48.0",
     "axios": "^1.6.5",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.1.0",

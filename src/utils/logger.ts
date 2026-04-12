@@ -1,5 +1,20 @@
 import winston from 'winston';
+import Transport from 'winston-transport';
+import * as Sentry from '@sentry/node';
 import dotenv from 'dotenv';
+
+class SentryTransport extends Transport {
+  log(info: any, callback: () => void) {
+    setImmediate(() => this.emit('logged', info));
+    if (info.level === 'error' && process.env.SENTRY_DSN) {
+      Sentry.captureMessage(info.message, {
+        level: 'error',
+        extra: info,
+      });
+    }
+    callback();
+  }
+}
 
 dotenv.config();
 
@@ -94,6 +109,10 @@ if (isProduction) {
       maxFiles: 5,
     })
   );
+}
+
+if (process.env.SENTRY_DSN) {
+  logger.add(new SentryTransport({ level: 'error' }));
 }
 
 export default logger;

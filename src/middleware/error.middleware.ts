@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 import { ZodError } from 'zod';
+import * as Sentry from '@sentry/node';
 
 /**
  * Standard API Error Response
@@ -242,6 +243,13 @@ export function errorHandler(
   } else if (statusCode >= 400) {
     // Client errors - log as warning
     logger.warn(message, logContext);
+  }
+
+  // Capture to Sentry (only when DSN is configured)
+  if (process.env.SENTRY_DSN) {
+    Sentry.captureException(err, {
+      extra: { path: req.path, method: req.method, statusCode },
+    });
   }
 
   // Send clean error response to client
