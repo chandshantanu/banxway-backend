@@ -31,7 +31,8 @@
     "workers:all:dev": "concurrently \"npm run worker:email-poller:dev\" \"npm run worker:whatsapp:dev\" \"npm run worker:transcription:dev\" \"npm run worker:kafka-consumer:dev\" \"npm run worker:document-processor:dev\" \"npm run worker:agent-result:dev\"",
     "seed:workflows": "ts-node src/scripts/seed-workflows.ts",
     "agents:deploy": "ts-node src/scripts/deploy-agents.ts",
-    "agents:deploy:dry-run": "ts-node src/scripts/deploy-agents.ts --dry-run"
+    "agents:deploy:dry-run": "ts-node src/scripts/deploy-agents.ts --dry-run",
+    "agents:validate": "ts-node scripts/validate-agents.ts"
   },
   "keywords": [
     "freight",
@@ -44,7 +45,7 @@
   "dependencies": {
     "@azure/storage-blob": "^12.27.0",
     "@huggingface/inference": "^2.6.4",
-    "@sentry/node": "^10.48.0",
+    "applicationinsights": "^3.14.0",
     "axios": "^1.6.5",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.1.0",
