@@ -334,36 +334,35 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-// Backfill: correlate uncorrelated threads in the background after startup.
-// Runs 30s after boot, processes 100 threads per batch with 2s pauses to
-// avoid saturating the small B1ms connection pool.
+// Backfill: get unique senders from uncorrelated threads and queue one
+// correlation per sender. The handler's retroactive linking will fan out
+// to all threads from that sender — so we only need ~N unique senders,
+// not ~3800 individual threads.
 async function runBackfillCorrelation(): Promise<void> {
   try {
     const { pool } = require('./config/pg-client');
     const { queueAgentResult } = require('./workers/agent-result.worker');
 
+    // Get 20 unique senders that have uncorrelated threads
     const result = await pool.query(`
-      SELECT DISTINCT ON (t.id)
-        t.id AS thread_id,
-        m.from_address,
-        m.from_name
-      FROM communication_threads t
-      JOIN communication_messages m ON m.thread_id = t.id
+      SELECT m.from_address, m.from_name, MIN(t.id) AS thread_id
+      FROM communication_messages m
+      JOIN communication_threads t ON t.id = m.thread_id
       WHERE t.crm_customer_id IS NULL
         AND t.archived = false
         AND m.direction = 'INBOUND'
         AND m.from_address IS NOT NULL
-      ORDER BY t.id, m.created_at ASC
-      LIMIT 100
+      GROUP BY m.from_address, m.from_name
+      LIMIT 20
     `);
 
     const rows = result.rows || [];
     if (rows.length === 0) {
-      logger.info('Backfill: all threads correlated');
+      logger.info('Backfill: all senders correlated');
       return;
     }
 
-    logger.info(`Backfill: queuing ${rows.length} threads for correlation`);
+    logger.info(`Backfill: queuing ${rows.length} unique senders for correlation`);
 
     for (const row of rows) {
       await queueAgentResult({
@@ -378,11 +377,9 @@ async function runBackfillCorrelation(): Promise<void> {
       }).catch(() => {});
     }
 
-    logger.info(`Backfill: ${rows.length} threads queued for correlation`);
-
-    // Schedule next batch in 60s (if there are more)
-    if (rows.length === 100) {
-      setTimeout(runBackfillCorrelation, 60000);
+    // Schedule next batch in 90s
+    if (rows.length === 20) {
+      setTimeout(runBackfillCorrelation, 90000);
     }
   } catch (err: any) {
     logger.warn('Backfill correlation failed (non-fatal)', { error: err.message });

@@ -261,18 +261,45 @@ async function handleCorrelationComplete(data: AgentResultJobData): Promise<void
       );
     }
 
-    // Link the thread to the CRM customer and record the classification
+    // Link this thread to the CRM customer
+    const now = new Date().toISOString();
     await supabaseAdmin
       .from('communication_threads')
       .update({
         crm_customer_id: crmCustomer.id,
         lead_classification: classification,
         correlation_status: 'matched',
-        correlated_at: new Date().toISOString(),
-        // Also populate shipment_id if we found an active shipment
+        correlated_at: now,
         ...(shipmentId ? { shipment_id: shipmentId } : {}),
       })
       .eq('id', threadId);
+
+    // Retroactive linking: find ALL other uncorrelated threads from the same sender
+    // and link them too. This naturally backfills old threads as new emails arrive.
+    try {
+      const { pool } = require('../config/pg-client');
+      const retroResult = await pool.query(`
+        UPDATE communication_threads t
+        SET crm_customer_id = $1,
+            lead_classification = $2,
+            correlation_status = 'matched',
+            correlated_at = $3
+        FROM communication_messages m
+        WHERE m.thread_id = t.id
+          AND m.from_address = $4
+          AND m.direction = 'INBOUND'
+          AND t.crm_customer_id IS NULL
+          AND t.id != $5
+      `, [crmCustomer.id, classification, now, fromEmail, threadId]);
+
+      if (retroResult.rowCount > 0) {
+        logger.info('Retroactive correlation: linked additional threads from same sender', {
+          fromEmail, linked: retroResult.rowCount, crmCustomerId: crmCustomer.id,
+        });
+      }
+    } catch (retroErr: any) {
+      logger.debug('Retroactive linking failed (non-fatal)', { error: retroErr.message });
+    }
 
     logger.info('Correlation complete', { threadId, classification, crmCustomerId: crmCustomer.id });
   } catch (err: any) {
