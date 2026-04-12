@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
-import { authenticateRequest, AuthenticatedRequest } from '../../../middleware/auth.middleware';
+import { authenticateRequest, requirePermission, AuthenticatedRequest } from '../../../middleware/auth.middleware';
+import { Permission } from '../../../utils/permissions';
 import crmService, {
   CrmError,
   CustomerNotFoundError,
@@ -13,7 +14,7 @@ router.use(authenticateRequest);
 // ============================================================================
 // GET /api/v1/crm/customers - List customers with filters
 // ============================================================================
-router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get('/', requirePermission(Permission.VIEW_CUSTOMERS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const {
       status,
@@ -71,7 +72,7 @@ router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> 
 // ============================================================================
 // GET /api/v1/crm/customers/pending-kyc - Get customers with pending KYC
 // ============================================================================
-router.get('/pending-kyc', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get('/pending-kyc', requirePermission(Permission.VIEW_CUSTOMERS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const customers = await crmService.getPendingKycCustomers();
 
@@ -92,7 +93,7 @@ router.get('/pending-kyc', async (req: AuthenticatedRequest, res: Response): Pro
 // ============================================================================
 // GET /api/v1/crm/customers/:id - Get customer by ID
 // ============================================================================
-router.get('/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get('/:id', requirePermission(Permission.VIEW_CUSTOMERS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const customer = await crmService.getCustomerById(id);
@@ -121,7 +122,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response): Promise<voi
 // ============================================================================
 // POST /api/v1/crm/customers - Create new customer
 // ============================================================================
-router.post('/', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.post('/', requirePermission(Permission.CREATE_CUSTOMERS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const customer = await crmService.createCustomer(req.body);
 
@@ -158,7 +159,7 @@ router.post('/', async (req: AuthenticatedRequest, res: Response): Promise<void>
 // ============================================================================
 // PATCH /api/v1/crm/customers/:id - Update customer
 // ============================================================================
-router.patch('/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.patch('/:id', requirePermission(Permission.UPDATE_CUSTOMERS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const customer = await crmService.updateCustomer(id, req.body);
@@ -204,7 +205,7 @@ router.patch('/:id', async (req: AuthenticatedRequest, res: Response): Promise<v
 // ============================================================================
 // POST /api/v1/crm/customers/:id/convert - Convert lead to customer
 // ============================================================================
-router.post('/:id/convert', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.post('/:id/convert', requirePermission(Permission.UPDATE_CUSTOMERS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
@@ -247,7 +248,7 @@ router.post('/:id/convert', async (req: AuthenticatedRequest, res: Response): Pr
 // ============================================================================
 // DELETE /api/v1/crm/customers/:id - Delete customer
 // ============================================================================
-router.delete('/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.delete('/:id', requirePermission(Permission.DELETE_CUSTOMERS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     await crmService.deleteCustomer(id);
@@ -279,7 +280,7 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: Response): Promise<
 // ============================================================================
 // GET /api/v1/crm/customers/:id/contacts - Get customer contacts
 // ============================================================================
-router.get('/:id/contacts', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get('/:id/contacts', requirePermission(Permission.VIEW_CUSTOMERS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const contacts = await crmService.getCustomerContacts(id);
@@ -312,7 +313,7 @@ router.get('/:id/contacts', async (req: AuthenticatedRequest, res: Response): Pr
 // ============================================================================
 // POST /api/v1/crm/customers/:id/contacts - Create contact for customer
 // ============================================================================
-router.post('/:id/contacts', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.post('/:id/contacts', requirePermission(Permission.CREATE_CUSTOMERS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 

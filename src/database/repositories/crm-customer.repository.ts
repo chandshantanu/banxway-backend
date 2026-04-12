@@ -374,18 +374,35 @@ export class CrmCustomerRepository {
   }
 
   /**
+   * Generate a unique customer code in format CUST-YYYY-NNNN.
+   * Implemented in TypeScript to avoid a dependency on the DB-side
+   * generate_customer_code() function which may not exist in all environments.
+   */
+  private async generateCustomerCode(): Promise<string> {
+    const yearStr = new Date().getFullYear().toString();
+
+    const { count, error } = await supabaseAdmin
+      .from('crm_customers')
+      .select('*', { count: 'exact' })
+      .like('customer_code', `CUST-${yearStr}-%`);
+
+    if (error) {
+      logger.warn('Could not count existing customer codes, using timestamp fallback', {
+        error: error.message,
+      });
+      // Fallback: timestamp-based suffix guarantees uniqueness
+      return `CUST-${yearStr}-${Date.now().toString().slice(-6)}`;
+    }
+
+    const seq = (count ?? 0) + 1;
+    return `CUST-${yearStr}-${seq.toString().padStart(4, '0')}`;
+  }
+
+  /**
    * Create new CRM customer
    */
   async create(customerData: CreateCrmCustomerRequest): Promise<CrmCustomer> {
-    // Generate customer code using database function
-    const { data: customerCode, error: codeError } = await supabaseAdmin.rpc(
-      'generate_customer_code'
-    );
-
-    if (codeError) {
-      logger.error('Error generating customer code', { error: codeError.message });
-      throw codeError;
-    }
+    const customerCode = await this.generateCustomerCode();
 
     const newCustomer = {
       ...customerData,

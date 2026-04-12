@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
-import { authenticateRequest, AuthenticatedRequest } from '../../../middleware/auth.middleware';
+import { authenticateRequest, requirePermission, AuthenticatedRequest } from '../../../middleware/auth.middleware';
+import { Permission } from '../../../utils/permissions';
 import crmService, { CrmError } from '../../../services/crm.service';
 import { logger } from '../../../utils/logger';
 
@@ -9,7 +10,7 @@ router.use(authenticateRequest);
 // ============================================================================
 // GET /api/v1/crm/contacts - Get all contacts across all customers
 // ============================================================================
-router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get('/', requirePermission(Permission.VIEW_CUSTOMERS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const contacts = await crmService.getAllContacts();
 

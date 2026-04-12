@@ -14,7 +14,8 @@
  */
 
 import { Router, type Response } from 'express';
-import { authenticateRequest, type AuthenticatedRequest } from '../../../middleware/auth.middleware';
+import { authenticateRequest, requirePermission, type AuthenticatedRequest } from '../../../middleware/auth.middleware';
+import { Permission } from '../../../utils/permissions';
 import { supabaseAdmin as supabase } from '../../../config/database.config';
 import { logger } from '../../../utils/logger';
 import { crmSyncService } from '../../../services/crm-sync.service';
@@ -58,7 +59,7 @@ router.get('/health', async (req: AuthenticatedRequest, res: Response) => {
     const { data: lastSync } = await supabase
       .from('crm_sync_logs')
       .select('created_at')
-      .eq('status', 'SUCCESS')
+      .eq('status', 'success')
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
@@ -67,7 +68,7 @@ router.get('/health', async (req: AuthenticatedRequest, res: Response) => {
     const { count: pending_syncs } = await supabase
       .from('crm_sync_logs')
       .select('*', { count: 'exact' })
-      .eq('status', 'IN_PROGRESS');
+      .eq('status', 'in_progress');
 
     res.json({
       success: true,
@@ -95,10 +96,12 @@ router.get('/health', async (req: AuthenticatedRequest, res: Response) => {
  */
 router.get('/stats', async (req: AuthenticatedRequest, res: Response) => {
   try {
-    // Get overall stats
+    // Get overall stats — limit to recent 10000 rows to avoid full table scan OOM
     const { data: logs } = await supabase
       .from('crm_sync_logs')
-      .select('status, entity_type, created_at');
+      .select('status, entity_type, created_at')
+      .order('created_at', { ascending: false })
+      .limit(10000);
 
     if (!logs) {
       return res.json({
@@ -120,35 +123,35 @@ router.get('/stats', async (req: AuthenticatedRequest, res: Response) => {
     }
 
     const total_syncs = logs.length;
-    const successful_syncs = logs.filter((l) => l.status === 'SUCCESS').length;
-    const failed_syncs = logs.filter((l) => l.status === 'FAILED').length;
-    const in_progress_syncs = logs.filter((l) => l.status === 'IN_PROGRESS').length;
+    const successful_syncs = logs.filter((l) => l.status === 'success').length;
+    const failed_syncs = logs.filter((l) => l.status === 'failed').length;
+    const in_progress_syncs = logs.filter((l) => l.status === 'in_progress').length;
     const last_sync_at = logs.length > 0 ? logs[0].created_at : null;
 
     // Calculate stats by entity type
     const sync_by_entity = {
       USER: {
         total: logs.filter((l) => l.entity_type === 'USER').length,
-        successful: logs.filter((l) => l.entity_type === 'USER' && l.status === 'SUCCESS').length,
-        failed: logs.filter((l) => l.entity_type === 'USER' && l.status === 'FAILED').length,
+        successful: logs.filter((l) => l.entity_type === 'USER' && l.status === 'success').length,
+        failed: logs.filter((l) => l.entity_type === 'USER' && l.status === 'failed').length,
       },
       CUSTOMER: {
         total: logs.filter((l) => l.entity_type === 'CUSTOMER').length,
-        successful: logs.filter((l) => l.entity_type === 'CUSTOMER' && l.status === 'SUCCESS')
+        successful: logs.filter((l) => l.entity_type === 'CUSTOMER' && l.status === 'success')
           .length,
-        failed: logs.filter((l) => l.entity_type === 'CUSTOMER' && l.status === 'FAILED').length,
+        failed: logs.filter((l) => l.entity_type === 'CUSTOMER' && l.status === 'failed').length,
       },
       CONTACT: {
         total: logs.filter((l) => l.entity_type === 'CONTACT').length,
-        successful: logs.filter((l) => l.entity_type === 'CONTACT' && l.status === 'SUCCESS')
+        successful: logs.filter((l) => l.entity_type === 'CONTACT' && l.status === 'success')
           .length,
-        failed: logs.filter((l) => l.entity_type === 'CONTACT' && l.status === 'FAILED').length,
+        failed: logs.filter((l) => l.entity_type === 'CONTACT' && l.status === 'failed').length,
       },
       QUOTATION: {
         total: logs.filter((l) => l.entity_type === 'QUOTATION').length,
-        successful: logs.filter((l) => l.entity_type === 'QUOTATION' && l.status === 'SUCCESS')
+        successful: logs.filter((l) => l.entity_type === 'QUOTATION' && l.status === 'success')
           .length,
-        failed: logs.filter((l) => l.entity_type === 'QUOTATION' && l.status === 'FAILED').length,
+        failed: logs.filter((l) => l.entity_type === 'QUOTATION' && l.status === 'failed').length,
       },
     };
 
@@ -221,7 +224,7 @@ router.get('/logs', async (req: AuthenticatedRequest, res: Response) => {
  * Trigger user sync to EspoCRM
  * CRITICAL: Users must be synced to EspoCRM for authentication and data ownership
  */
-router.post('/user', async (req: AuthenticatedRequest, res: Response) => {
+router.post('/user', requirePermission(Permission.MANAGE_INTEGRATIONS), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { user_id } = req.body;
 
@@ -261,7 +264,7 @@ router.post('/user', async (req: AuthenticatedRequest, res: Response) => {
  * POST /api/v1/crm/sync/customer
  * Trigger customer sync to EspoCRM
  */
-router.post('/customer', async (req: AuthenticatedRequest, res: Response) => {
+router.post('/customer', requirePermission(Permission.MANAGE_INTEGRATIONS), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { customer_id } = req.body;
 
@@ -302,7 +305,7 @@ router.post('/customer', async (req: AuthenticatedRequest, res: Response) => {
  * POST /api/v1/crm/sync/contact
  * Trigger contact sync to EspoCRM
  */
-router.post('/contact', async (req: AuthenticatedRequest, res: Response) => {
+router.post('/contact', requirePermission(Permission.MANAGE_INTEGRATIONS), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { contact_id } = req.body;
 
@@ -342,7 +345,7 @@ router.post('/contact', async (req: AuthenticatedRequest, res: Response) => {
  * POST /api/v1/crm/sync/quotation
  * Trigger quotation sync to EspoCRM
  */
-router.post('/quotation', async (req: AuthenticatedRequest, res: Response) => {
+router.post('/quotation', requirePermission(Permission.MANAGE_INTEGRATIONS), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { quotation_id } = req.body;
 
@@ -382,7 +385,7 @@ router.post('/quotation', async (req: AuthenticatedRequest, res: Response) => {
  * POST /api/v1/crm/sync/bulk-customers
  * Bulk sync customers to EspoCRM
  */
-router.post('/bulk-customers', async (req: AuthenticatedRequest, res: Response) => {
+router.post('/bulk-customers', requirePermission(Permission.MANAGE_INTEGRATIONS), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { customer_ids } = req.body;
 
@@ -434,7 +437,7 @@ router.post('/bulk-customers', async (req: AuthenticatedRequest, res: Response) 
  * POST /api/v1/crm/sync/retry/:id
  * Retry failed sync
  */
-router.post('/retry/:id', async (req: AuthenticatedRequest, res: Response) => {
+router.post('/retry/:id', requirePermission(Permission.MANAGE_INTEGRATIONS), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
 
