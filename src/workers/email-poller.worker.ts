@@ -685,7 +685,7 @@ async function sendEmail(data: any): Promise<void> {
 }
 
 // Configuration - Real-time sync
-const POLL_INTERVAL = parseInt(process.env.EMAIL_POLL_INTERVAL || '15000'); // 15 seconds for real-time sync
+const POLL_INTERVAL = parseInt(process.env.EMAIL_POLL_INTERVAL || '60000'); // 60s default — balance between real-time and DB load
 const EMAIL_SYNC_DAYS = parseInt(process.env.EMAIL_SYNC_DAYS || '30'); // Sync last 30 days to catch all emails
 const EMAIL_SYNC_LIMIT = parseInt(process.env.EMAIL_SYNC_LIMIT || '500'); // Limit to 500 emails per poll
 

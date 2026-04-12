@@ -12,19 +12,29 @@
 import { Pool, PoolConfig } from 'pg';
 import { logger } from '../utils/logger';
 
-// Connection pool
+// Connection pool — Azure PostgreSQL Flexible Server (B1ms) supports ~50 connections.
+// Reserve headroom for Azure-internal connections + GoTrue.
 const poolConfig: PoolConfig = {
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
-  max: 30,
+  max: parseInt(process.env.PG_POOL_MAX || '40', 10),
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  connectionTimeoutMillis: 10000, // 10s (was 5s — too aggressive under load)
 };
 
 export const pool = new Pool(poolConfig);
 
 pool.on('error', (err) => {
   logger.error('Unexpected PostgreSQL pool error', { error: err.message });
+});
+
+// Set service-level JWT claims on every new connection so that RLS policies
+// using auth.uid() IS NOT NULL pass for backend service connections.
+// Auth/RBAC is enforced at the Express middleware level (requirePermission).
+pool.on('connect', (client) => {
+  client.query(`SET request.jwt.claim.sub = '00000000-0000-0000-0000-000000000000'`).catch((err) => {
+    logger.warn('Could not set request.jwt.claim.sub — RLS may block writes', { error: err.message });
+  });
 });
 
 // Types
@@ -78,7 +88,12 @@ class QueryBuilder<T = any> {
   }
 
   select(columns: string = '*', opts?: { count?: 'exact' }): this {
-    this.operation = 'SELECT';
+    // When chained after insert/update/delete/upsert, .select() means "return columns
+    // via RETURNING" — do NOT reset the operation to SELECT.
+    const writeOps: typeof this.operation[] = ['INSERT', 'UPDATE', 'DELETE', 'UPSERT'];
+    if (!writeOps.includes(this.operation)) {
+      this.operation = 'SELECT';
+    }
     this.selectColumns = columns;
     if (opts?.count === 'exact') {
       this.countMode = 'exact';
