@@ -2,7 +2,7 @@ import rateLimit from 'express-rate-limit';
 import { ApiResponse } from '../types';
 
 const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'); // 15 minutes
-const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '1000'); // Increased for production
+const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '5000'); // Generous limit; tune per-route if needed
 
 export const rateLimiter = rateLimit({
   windowMs,

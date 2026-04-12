@@ -93,6 +93,7 @@ export interface CreateCrmCustomerRequest {
   employee_count?: number;
   customer_tier?: CustomerTier;
   status?: CrmCustomerStatus;
+  kyc_status?: KycStatus;
   credit_terms?: CreditTerms;
   credit_limit_usd?: number;
   account_manager?: string;
@@ -409,7 +410,7 @@ export class CrmCustomerRepository {
       customer_code: customerCode,
       customer_tier: customerData.customer_tier || 'NEW',
       status: customerData.status || 'LEAD',
-      kyc_status: 'PENDING' as const,
+      kyc_status: customerData.kyc_status || ('PENDING' as const),
       credit_terms: customerData.credit_terms || 'ADVANCE',
       outstanding_balance_usd: 0,
       tags: customerData.tags || [],

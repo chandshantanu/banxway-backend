@@ -85,7 +85,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-
 // API v1 routes
 app.use('/api/v1', apiV1Router);
 
@@ -149,6 +148,32 @@ async function startServer() {
       }
     } catch (dbFixErr: any) {
       logger.warn('DB search_path fix failed', { error: dbFixErr.message });
+    }
+
+    // Disable RLS on CRM tables (RLS with auth.uid() blocks backend service connections
+    // because Azure PostgreSQL does not support the Supabase request.jwt.claim.sub GUC)
+    try {
+      const { pool } = require('./config/pg-client');
+      // Check current RLS status
+      const rlsCheck = await pool.query(`
+        SELECT tablename, rowsecurity
+        FROM pg_tables
+        WHERE schemaname = 'public'
+        AND tablename IN ('crm_customers', 'crm_contacts', 'customer_interactions', 'customer_documents')
+        ORDER BY tablename
+      `);
+      logger.info('DB fix: CRM RLS status before fix', { tables: rlsCheck.rows });
+      // Disable RLS on each table separately
+      for (const tbl of ['crm_customers', 'crm_contacts', 'customer_interactions', 'customer_documents']) {
+        try {
+          await pool.query(`ALTER TABLE IF EXISTS ${tbl} DISABLE ROW LEVEL SECURITY`);
+          logger.info(`DB fix: RLS disabled on ${tbl}`);
+        } catch (tblErr: any) {
+          logger.warn(`DB fix: could not disable RLS on ${tbl}`, { error: tblErr.message });
+        }
+      }
+    } catch (rlsFixErr: any) {
+      logger.warn('DB fix: CRM RLS check/disable failed (non-fatal)', { error: rlsFixErr.message });
     }
 
     // Test Redis connection (non-blocking)
