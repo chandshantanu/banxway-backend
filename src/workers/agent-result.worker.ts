@@ -18,6 +18,45 @@ import { getRedisConnection } from '../config/redis.config';
 import { supabaseAdmin } from '../config/database.config';
 import { publishToKafka, KAFKA_TOPICS } from '../config/kafka.config';
 import crmCustomerRepository from '../database/repositories/crm-customer.repository';
+import notificationRepository from '../database/repositories/notification.repository';
+import { io } from '../index';
+
+/**
+ * Notify all active users and push via WebSocket.
+ * Non-fatal — notification failures must never block the pipeline.
+ */
+async function notifyTeam(
+  type: 'TASK_ASSIGNED' | 'HIGH_PRIORITY' | 'HANDOFF_REQUEST',
+  title: string,
+  message: string,
+  opts: { threadId?: string; actionUrl?: string } = {}
+): Promise<void> {
+  try {
+    // Find all active users to notify
+    const { data: users } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('is_active', true);
+
+    if (!users?.length) return;
+
+    for (const user of users) {
+      await notificationRepository.create({
+        user_id: user.id,
+        type,
+        title,
+        message,
+        thread_id: opts.threadId,
+        action_url: opts.actionUrl,
+      }).catch(() => {}); // swallow per-user errors
+    }
+
+    // Real-time push via WebSocket
+    io?.emit('notification:new', { type, title, message, ...opts });
+  } catch (err: any) {
+    logger.warn('Failed to send team notification (non-fatal)', { error: err.message });
+  }
+}
 
 export type AgentResultType =
   | 'ingestion_complete'
@@ -108,12 +147,32 @@ async function handleProcessingComplete(data: AgentResultJobData): Promise<void>
   // Forward to business layer via Kafka if it's an actionable intent
   const actionableIntents = ['quote_request', 'booking', 'shipment_update'];
   if (actionableIntents.includes(intent)) {
+    // Look up the thread for this message so we can pass threadId downstream
+    const { data: msg } = await supabaseAdmin
+      .from('communication_messages')
+      .select('thread_id, from_address, subject')
+      .eq('id', messageId)
+      .single();
+
     await publishToKafka(KAFKA_TOPICS.BUSINESS, {
       messageId,
+      threadId: msg?.thread_id,
       intent,
       entities,
       confidence,
     }, messageId);
+
+    // Notify team about actionable email
+    const intentLabel = intent === 'quote_request' ? 'Quote Request'
+      : intent === 'booking' ? 'Booking Request'
+      : 'Shipment Update';
+
+    await notifyTeam(
+      'TASK_ASSIGNED',
+      `${intentLabel} detected`,
+      `Email from ${msg?.from_address || 'unknown'}: "${msg?.subject || 'no subject'}" classified as ${intentLabel} (${Math.round((confidence || 0) * 100)}% confidence).`,
+      { threadId: msg?.thread_id, actionUrl: `/inbox?thread=${msg?.thread_id}` }
+    );
   }
 
   logger.info('Processing result handled', { messageId, intent, confidence });
@@ -192,6 +251,14 @@ async function handleCorrelationComplete(data: AgentResultJobData): Promise<void
       logger.info('Correlation: created new lead from inbound email', {
         threadId, crmCustomerId: crmCustomer.id, fromEmail,
       });
+
+      // Notify the team about the new lead
+      await notifyTeam(
+        'HIGH_PRIORITY',
+        `New Lead: ${displayName}`,
+        `Inbound email from ${fromEmail} — auto-created as CRM lead.`,
+        { threadId, actionUrl: `/inbox?thread=${threadId}` }
+      );
     }
 
     // Link the thread to the CRM customer and record the classification
@@ -252,11 +319,29 @@ async function handleExtractionComplete(data: AgentResultJobData): Promise<void>
 }
 
 /**
- * Handle business result — create/update shipment_requests or rate_quotes
+ * Handle business result — create/update shipment_requests or rate_quotes,
+ * then auto-create a draft quotation and link to the CRM customer.
  */
 async function handleBusinessResult(data: AgentResultJobData): Promise<void> {
   const { entityId, payload } = data;
   const { resultType: bizType, shipmentData, quoteData, threadId } = payload;
+
+  // Look up thread context (CRM customer, from_address) for downstream linking
+  const { data: thread } = await supabaseAdmin
+    .from('communication_threads')
+    .select('crm_customer_id, reference')
+    .eq('id', threadId)
+    .single();
+
+  // Resolve CRM customer name + email for quotation
+  let customerName = '';
+  let customerEmail = '';
+  let customerId = thread?.crm_customer_id;
+  if (customerId) {
+    const cust = await crmCustomerRepository.findById(customerId);
+    customerName = cust?.legal_name || cust?.trading_name || '';
+    customerEmail = cust?.primary_email || '';
+  }
 
   if (bizType === 'shipment_request' && shipmentData) {
     const { data: existing } = await supabaseAdmin
@@ -268,14 +353,64 @@ async function handleBusinessResult(data: AgentResultJobData): Promise<void> {
     if (existing) {
       await supabaseAdmin
         .from('shipment_requests')
-        .update({ ...shipmentData, agent_updated_at: new Date().toISOString() })
+        .update({
+          ...shipmentData,
+          crm_customer_id: customerId,
+          agent_updated_at: new Date().toISOString(),
+        })
         .eq('id', existing.id);
     } else {
       await supabaseAdmin
         .from('shipment_requests')
-        .insert({ ...shipmentData, thread_id: threadId, status: 'draft' });
+        .insert({
+          ...shipmentData,
+          thread_id: threadId,
+          crm_customer_id: customerId,
+          status: 'draft',
+        });
     }
     logger.info('Business result: shipment_request upserted', { entityId, threadId });
+
+    // Auto-create a DRAFT quotation linked to this thread and customer
+    try {
+      const origin = shipmentData.origin || shipmentData.pol || '';
+      const destination = shipmentData.destination || shipmentData.pod || '';
+      const shipmentType = shipmentData.shipment_type || 'FCL_IMPORT';
+
+      await supabaseAdmin
+        .from('quotations')
+        .insert({
+          customer_id: customerId,
+          customer_name: customerName,
+          customer_email: customerEmail,
+          shipment_type: shipmentType,
+          origin_location: origin,
+          destination_location: destination,
+          cargo_description: shipmentData.commodity || shipmentData.cargo_description || '',
+          cargo_weight_kg: shipmentData.weight_kg || shipmentData.cargo_weight_kg || 0,
+          status: 'DRAFT',
+          notes: `Auto-generated from inbound email (thread ${thread?.reference || threadId}).`,
+          service_requirements: {
+            thread_id: threadId,
+            source: 'agent_pipeline',
+            agent_id: data.agentId,
+            extracted_entities: shipmentData,
+          },
+        });
+
+      logger.info('Auto-created draft quotation from shipment request', {
+        threadId, customerId, origin, destination,
+      });
+
+      await notifyTeam(
+        'TASK_ASSIGNED',
+        'Draft quotation ready for review',
+        `Agent extracted shipment details from ${customerName || customerEmail} and created a draft quotation (${origin} → ${destination}). Review and send.`,
+        { threadId, actionUrl: '/quotations?status=DRAFT' }
+      );
+    } catch (qErr: any) {
+      logger.warn('Failed to auto-create quotation (non-fatal)', { error: qErr.message, threadId });
+    }
   }
 
   if (bizType === 'rate_quote' && quoteData) {
