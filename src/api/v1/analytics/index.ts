@@ -103,7 +103,10 @@ router.get('/dashboard', requirePermission(Permission.VIEW_ANALYTICS), async (re
       const date = new Date();
       date.setDate(date.getDate() - (6 - i));
       const dateStr = date.toISOString().split('T')[0];
-      const count = recentThreads.filter(t => t.created_at?.startsWith(dateStr)).length;
+      const count = recentThreads.filter(t => {
+        const ts = t.created_at instanceof Date ? t.created_at.toISOString() : String(t.created_at || '');
+        return ts.startsWith(dateStr);
+      }).length;
       return { date: dateStr, count };
     });
 
