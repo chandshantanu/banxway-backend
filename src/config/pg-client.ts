@@ -17,9 +17,9 @@ import { logger } from '../utils/logger';
 const poolConfig: PoolConfig = {
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
-  max: parseInt(process.env.PG_POOL_MAX || '40', 10),
+  max: parseInt(process.env.PG_POOL_MAX || '20', 10),
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000, // 10s (was 5s — too aggressive under load)
+  connectionTimeoutMillis: 15000, // 15s to handle slow Azure PG under load
 };
 
 export const pool = new Pool(poolConfig);

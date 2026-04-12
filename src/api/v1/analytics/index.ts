@@ -672,74 +672,54 @@ router.get('/pipeline-status', requirePermission(Permission.VIEW_ANALYTICS), asy
  */
 router.post('/backfill-correlation', requirePermission(Permission.VIEW_ANALYTICS), async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
+    const { pool } = require('../../../config/pg-client');
     const { queueAgentResult } = require('../../../workers/agent-result.worker');
 
-    // Find all threads that haven't been correlated yet
-    const { data: uncorrelatedThreads, error } = await supabaseAdmin
-      .from('communication_threads')
-      .select('id')
-      .is('crm_customer_id', null)
-      .eq('archived', false)
-      .limit(1000); // Process in batches of 1000
+    // Single efficient query: get uncorrelated threads + first inbound sender in one JOIN
+    const result = await pool.query(`
+      SELECT DISTINCT ON (t.id)
+        t.id AS thread_id,
+        m.from_address,
+        m.from_name
+      FROM communication_threads t
+      JOIN communication_messages m ON m.thread_id = t.id
+      WHERE t.crm_customer_id IS NULL
+        AND t.archived = false
+        AND m.direction = 'INBOUND'
+        AND m.from_address IS NOT NULL
+      ORDER BY t.id, m.created_at ASC
+      LIMIT 500
+    `);
 
-    if (error || !uncorrelatedThreads?.length) {
-      res.json({
-        success: true,
-        data: { queued: 0, message: 'No uncorrelated threads found' },
-      });
+    const rows = result.rows || [];
+    if (rows.length === 0) {
+      res.json({ success: true, data: { queued: 0, message: 'No uncorrelated threads found' } });
       return;
     }
 
+    // Queue all at once — BullMQ worker processes them serially (concurrency: 10)
     let queued = 0;
-    const batchSize = 50;
-
-    for (let i = 0; i < uncorrelatedThreads.length; i += batchSize) {
-      const batch = uncorrelatedThreads.slice(i, i + batchSize);
-      const threadIds = batch.map((t: any) => t.id);
-
-      // For each thread, find its first inbound message to get the sender
-      const { data: messages } = await supabaseAdmin
-        .from('communication_messages')
-        .select('thread_id, from_address, from_name')
-        .in('thread_id', threadIds)
-        .eq('direction', 'INBOUND')
-        .order('created_at', { ascending: true });
-
-      // Group first message per thread
-      const threadSenders = new Map<string, { email: string; name: string }>();
-      for (const msg of (messages || [])) {
-        if (msg.from_address && !threadSenders.has(msg.thread_id)) {
-          threadSenders.set(msg.thread_id, {
-            email: msg.from_address,
-            name: msg.from_name || '',
-          });
-        }
-      }
-
-      // Queue correlation for each
-      for (const [threadId, sender] of threadSenders) {
-        await queueAgentResult({
-          resultType: 'correlation_complete',
-          agentId: 'backfill',
-          entityId: threadId,
-          payload: {
-            threadId,
-            fromEmail: sender.email,
-            fromName: sender.name,
-          },
-        }).catch(() => {}); // swallow individual failures
-        queued++;
-      }
+    for (const row of rows) {
+      await queueAgentResult({
+        resultType: 'correlation_complete',
+        agentId: 'backfill',
+        entityId: row.thread_id,
+        payload: {
+          threadId: row.thread_id,
+          fromEmail: row.from_address,
+          fromName: row.from_name || '',
+        },
+      }).catch(() => {});
+      queued++;
     }
 
-    logger.info('Backfill correlation started', { queued, total: uncorrelatedThreads.length });
+    logger.info('Backfill correlation started', { queued });
 
     res.json({
       success: true,
       data: {
         queued,
-        total_uncorrelated: uncorrelatedThreads.length,
-        message: `Queued ${queued} threads for correlation. Processing async.`,
+        message: `Queued ${queued} threads for correlation. Processing async — check /pipeline-status for progress.`,
       },
     });
   } catch (error: any) {
