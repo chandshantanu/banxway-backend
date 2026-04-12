@@ -354,6 +354,7 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
 
     // Create message with email account reference
     // Use ON CONFLICT to handle race conditions
+    const uploadedAttachments = await uploadAttachments(parsed.messageId, parsed.attachments);
     const { data: message, error: insertError } = await supabaseAdmin
       .from('communication_messages')
       .insert({
@@ -365,11 +366,11 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
         subject: parsed.subject,
         from_address: parsed.from.address,
         from_name: parsed.from.name,
-        to_addresses: parsed.to,
-        cc_addresses: parsed.cc,
+        to_addresses: sanitizeForJsonb(parsed.to ?? []),
+        cc_addresses: sanitizeForJsonb(parsed.cc ?? []),
         external_id: parsed.messageId,
         external_thread_id: parsed.inReplyTo,
-        attachments: await uploadAttachments(parsed.messageId, parsed.attachments),
+        attachments: sanitizeForJsonb(uploadedAttachments),
         email_account_id: accountId,
       })
       .select()
@@ -454,6 +455,23 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
     logger.error('Error processing email', { accountId, error: error.message });
     throw error;
   }
+}
+
+/**
+ * Strip null bytes from strings so PostgreSQL JSONB columns accept the data.
+ * Malformed emails can include \u0000 in filenames, content-types, or addresses.
+ */
+function sanitizeForJsonb(value: any): any {
+  if (typeof value === 'string') return value.replace(/\u0000/g, '');
+  if (Array.isArray(value)) return value.map(sanitizeForJsonb);
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = sanitizeForJsonb(v);
+    }
+    return out;
+  }
+  return value;
 }
 
 /**
