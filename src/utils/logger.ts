@@ -1,16 +1,20 @@
 import winston from 'winston';
 import Transport from 'winston-transport';
-import * as Sentry from '@sentry/node';
+import appInsights from 'applicationinsights';
 import dotenv from 'dotenv';
 
-class SentryTransport extends Transport {
+class AppInsightsTransport extends Transport {
   log(info: any, callback: () => void) {
     setImmediate(() => this.emit('logged', info));
-    if (info.level === 'error' && process.env.SENTRY_DSN) {
-      Sentry.captureMessage(info.message, {
-        level: 'error',
-        extra: info,
-      });
+    if (info.level === 'error' && process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
+      const client = appInsights.defaultClient;
+      if (client) {
+        client.trackTrace({
+          message: info.message,
+          severity: appInsights.KnownSeverityLevel.Error,
+          properties: info,
+        });
+      }
     }
     callback();
   }
@@ -111,8 +115,8 @@ if (isProduction) {
   );
 }
 
-if (process.env.SENTRY_DSN) {
-  logger.add(new SentryTransport({ level: 'error' }));
+if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
+  logger.add(new AppInsightsTransport({ level: 'error' }));
 }
 
 export default logger;

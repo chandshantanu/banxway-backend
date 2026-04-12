@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 import { ZodError } from 'zod';
-import * as Sentry from '@sentry/node';
+import appInsights from 'applicationinsights';
 
 /**
  * Standard API Error Response
@@ -245,11 +245,15 @@ export function errorHandler(
     logger.warn(message, logContext);
   }
 
-  // Capture to Sentry (only when DSN is configured)
-  if (process.env.SENTRY_DSN) {
-    Sentry.captureException(err, {
-      extra: { path: req.path, method: req.method, statusCode },
-    });
+  // Capture to Azure Application Insights (only when connection string is configured)
+  if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
+    const client = appInsights.defaultClient;
+    if (client) {
+      client.trackException({
+        exception: err,
+        properties: { path: req.path, method: req.method, statusCode: String(statusCode) },
+      });
+    }
   }
 
   // Send clean error response to client
