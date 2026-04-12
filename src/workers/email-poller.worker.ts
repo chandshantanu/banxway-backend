@@ -17,6 +17,17 @@ import { blobStorage, CONTAINERS, BlobStorageService } from '../services/storage
 // Get Redis connection and queue (lazy initialization)
 const emailQueue = getEmailQueue();
 
+// Cache email account lookups for 2 minutes to avoid hammering the DB
+// during backlog processing (hundreds of emails, same account ID each time).
+const accountCache = new Map<string, { data: any; expiresAt: number }>();
+async function getCachedAccount(accountId: string): Promise<any> {
+  const hit = accountCache.get(accountId);
+  if (hit && hit.expiresAt > Date.now()) return hit.data;
+  const { data } = await supabaseAdmin.from('email_accounts').select('*').eq('id', accountId).single();
+  accountCache.set(accountId, { data, expiresAt: Date.now() + 2 * 60 * 1000 });
+  return data;
+}
+
 // Worker to process email jobs
 // concurrency: 10 — allows up to 10 PROCESS_EMAIL jobs to run in parallel, which
 // prevents a large batch of emails from blocking POLL_ALL_INBOXES / POLL_INBOX jobs.
@@ -278,8 +289,8 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
 
     const parsed = await parseEmailBuffer(Buffer.from(emailBuffer));
 
-    // Get the email account for context
-    const account = await emailAccountRepository.findById(accountId);
+    // Get the email account for context (cached — same account hit on every email in backlog)
+    const account = await getCachedAccount(accountId);
 
     logger.info('✉️  Email parsed successfully', {
       accountId,
