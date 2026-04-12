@@ -17,10 +17,12 @@ import { logger } from '../utils/logger';
 import { getRedisConnection } from '../config/redis.config';
 import { supabaseAdmin } from '../config/database.config';
 import { publishToKafka, KAFKA_TOPICS } from '../config/kafka.config';
+import crmCustomerRepository from '../database/repositories/crm-customer.repository';
 
 export type AgentResultType =
   | 'ingestion_complete'
   | 'processing_complete'
+  | 'correlation_complete'
   | 'extraction_complete'
   | 'business_result'
   | 'validation_required'
@@ -115,6 +117,106 @@ async function handleProcessingComplete(data: AgentResultJobData): Promise<void>
   }
 
   logger.info('Processing result handled', { messageId, intent, confidence });
+}
+
+/**
+ * Handle correlation complete — the core intelligence step.
+ *
+ * Given a thread and the sender's email address, this handler:
+ *   1. Looks up the sender in crm_customers (primary_email match)
+ *   2. If found → links thread to existing customer, classifies as 'existing_customer'
+ *      and checks for active shipments to refine to 'existing_shipment'
+ *   3. If not found → auto-creates a new CRM customer with status='LEAD',
+ *      links thread, classifies as 'new_lead'
+ *
+ * This can be triggered by:
+ *   a) The correlationEngine AgentBuilder agent calling /agent-webhooks/correlation-complete
+ *   b) Directly from the email-poller worker after a message is saved (backend-native path)
+ */
+async function handleCorrelationComplete(data: AgentResultJobData): Promise<void> {
+  const { entityId: threadId, payload } = data;
+  const {
+    fromEmail,
+    fromName,
+    matchedCustomerId,   // provided by agent (optional — we re-verify)
+    matchedShipmentId,   // provided by agent (optional)
+    classification: agentClassification,
+  } = payload;
+
+  if (!threadId || !fromEmail) {
+    logger.warn('Correlation skipped — missing threadId or fromEmail', { threadId, fromEmail });
+    return;
+  }
+
+  try {
+    let crmCustomer = matchedCustomerId
+      ? await crmCustomerRepository.findById(matchedCustomerId)
+      : await crmCustomerRepository.findByEmail(fromEmail);
+
+    let classification: string;
+    let shipmentId: string | null = matchedShipmentId || null;
+
+    if (crmCustomer) {
+      // Customer already exists — check for active shipments on this thread or customer
+      if (!shipmentId) {
+        const { data: openShipments } = await supabaseAdmin
+          .from('shipments')
+          .select('id')
+          .eq('customer_id', crmCustomer.id)
+          .in('status', ['BOOKED', 'IN_TRANSIT', 'AT_PORT', 'CUSTOMS_CLEARANCE'])
+          .order('created_at', { ascending: false })
+          .limit(1);
+        shipmentId = openShipments?.[0]?.id ?? null;
+      }
+
+      classification = shipmentId ? 'existing_shipment' : 'existing_customer';
+
+      logger.info('Correlation: matched existing customer', {
+        threadId, crmCustomerId: crmCustomer.id, classification, shipmentId,
+      });
+    } else {
+      // New sender — auto-create as a LEAD in CRM
+      const displayName = fromName || fromEmail.split('@')[0];
+      crmCustomer = await crmCustomerRepository.create({
+        legal_name: displayName,
+        trading_name: displayName,
+        primary_email: fromEmail,
+        status: 'LEAD',
+        customer_tier: 'NEW',
+        lead_source: 'email_inbound',
+        lead_notes: `Auto-created from inbound email: ${fromEmail}`,
+      });
+
+      classification = 'new_lead';
+
+      logger.info('Correlation: created new lead from inbound email', {
+        threadId, crmCustomerId: crmCustomer.id, fromEmail,
+      });
+    }
+
+    // Link the thread to the CRM customer and record the classification
+    await supabaseAdmin
+      .from('communication_threads')
+      .update({
+        crm_customer_id: crmCustomer.id,
+        lead_classification: classification,
+        correlation_status: 'matched',
+        correlated_at: new Date().toISOString(),
+        // Also populate shipment_id if we found an active shipment
+        ...(shipmentId ? { shipment_id: shipmentId } : {}),
+      })
+      .eq('id', threadId);
+
+    logger.info('Correlation complete', { threadId, classification, crmCustomerId: crmCustomer.id });
+  } catch (err: any) {
+    // Mark thread correlation as failed but don't throw — email is already saved
+    await supabaseAdmin
+      .from('communication_threads')
+      .update({ correlation_status: 'failed' })
+      .eq('id', threadId);
+
+    logger.error('Correlation handler failed', { threadId, fromEmail, error: err.message });
+  }
 }
 
 /**
@@ -254,6 +356,9 @@ async function processAgentResultJob(job: Job<AgentResultJobData>): Promise<void
       break;
     case 'processing_complete':
       await handleProcessingComplete(job.data);
+      break;
+    case 'correlation_complete':
+      await handleCorrelationComplete(job.data);
       break;
     case 'extraction_complete':
       await handleExtractionComplete(job.data);

@@ -150,6 +150,30 @@ async function startServer() {
       logger.warn('DB search_path fix failed', { error: dbFixErr.message });
     }
 
+    // Run migration 013: add crm_customer_id + lead_classification to communication_threads
+    try {
+      const { pool } = require('./config/pg-client');
+      await pool.query(`
+        ALTER TABLE communication_threads
+          ADD COLUMN IF NOT EXISTS crm_customer_id UUID REFERENCES crm_customers(id),
+          ADD COLUMN IF NOT EXISTS lead_classification VARCHAR(30)
+            CHECK (lead_classification IN ('new_lead', 'existing_customer', 'existing_shipment', 'unknown')),
+          ADD COLUMN IF NOT EXISTS correlation_status VARCHAR(20)
+            CHECK (correlation_status IN ('pending', 'matched', 'created', 'failed'))
+            DEFAULT 'pending',
+          ADD COLUMN IF NOT EXISTS correlated_at TIMESTAMPTZ;
+        CREATE INDEX IF NOT EXISTS idx_threads_crm_customer
+          ON communication_threads(crm_customer_id) WHERE crm_customer_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_threads_lead_classification
+          ON communication_threads(lead_classification) WHERE lead_classification IS NOT NULL;
+        ALTER TABLE shipment_requests
+          ADD COLUMN IF NOT EXISTS crm_customer_id UUID REFERENCES crm_customers(id);
+      `);
+      logger.info('Migration 013: correlation engine columns applied');
+    } catch (m013Err: any) {
+      logger.warn('Migration 013 failed (non-fatal — columns may already exist)', { error: m013Err.message });
+    }
+
     // Disable RLS on CRM tables (RLS with auth.uid() blocks backend service connections
     // because Azure PostgreSQL does not support the Supabase request.jwt.claim.sub GUC)
     try {

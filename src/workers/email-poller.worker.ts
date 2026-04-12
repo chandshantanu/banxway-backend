@@ -13,6 +13,7 @@ import { Channel, MessageDirection, ThreadType } from '../types';
 import { io } from '../index';
 import { publishToKafka, KAFKA_TOPICS } from '../config/kafka.config';
 import { blobStorage, CONTAINERS, BlobStorageService } from '../services/storage/blob-storage.service';
+import { queueAgentResult } from './agent-result.worker';
 
 // Get Redis connection and queue (lazy initialization)
 const emailQueue = getEmailQueue();
@@ -417,6 +418,24 @@ async function processEmail(emailBuffer: string, accountId: string): Promise<voi
         accountId,
         from: parsed.from.address,
         subject: parsed.subject,
+      });
+
+      // Trigger correlation engine: link thread to CRM customer, classify new lead vs existing.
+      // Non-fatal — email is already saved even if correlation fails.
+      queueAgentResult({
+        resultType: 'correlation_complete',
+        agentId: 'email-poller-native',
+        entityId: thread.id,
+        payload: {
+          threadId: thread.id,
+          messageId: message.id,
+          fromEmail: parsed.from.address,
+          fromName: parsed.from.name || '',
+        },
+      }).catch((err: any) => {
+        logger.warn('Failed to queue correlation job (non-fatal)', {
+          threadId: thread.id, error: err.message,
+        });
       });
 
       // Emit WebSocket event

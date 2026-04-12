@@ -159,6 +159,53 @@ router.post('/validation-required', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/v1/agent-webhooks/correlation-complete
+ * Called by L2 correlationEngine agent when it has matched/classified a thread.
+ * Payload tells us: which customer matched (or none), and whether this is a
+ * new lead, an existing customer, or an update to an existing shipment.
+ */
+router.post('/correlation-complete', async (req: Request, res: Response) => {
+  try {
+    const {
+      agentId,
+      threadId,
+      messageId,
+      fromEmail,
+      fromName,
+      matchedCustomerId,   // UUID of existing crm_customer (null if not found)
+      matchedShipmentId,   // UUID of active shipment linked to the customer (null if none)
+      classification,      // 'new_lead' | 'existing_customer' | 'existing_shipment'
+      confidence,
+      metadata,
+    } = req.body;
+
+    if (!agentId || !threadId) {
+      return res.status(400).json({ success: false, error: 'agentId and threadId are required' });
+    }
+
+    logger.info('Correlation complete webhook received', {
+      agentId, threadId, messageId, classification, matchedCustomerId,
+    });
+
+    await queueAgentResult({
+      resultType: 'correlation_complete',
+      agentId,
+      entityId: threadId,
+      payload: {
+        threadId, messageId, fromEmail, fromName,
+        matchedCustomerId, matchedShipmentId,
+        classification, confidence, metadata,
+      },
+    });
+
+    res.json({ success: true, received: true });
+  } catch (error) {
+    logger.error('Correlation webhook failed', { error: (error as Error).message });
+    res.status(500).json({ success: false, error: 'Webhook processing failed' });
+  }
+});
+
+/**
  * POST /api/v1/agent-webhooks/validation-complete
  * Called when human or client validation is completed.
  */
