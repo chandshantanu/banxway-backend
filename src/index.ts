@@ -207,6 +207,21 @@ async function startServer() {
       logger.warn('Migration 018 failed (non-fatal)', { error: m018Err.message });
     }
 
+    // Migration 019: Communication backbone — entity types, pipeline stages, pending contacts, thread participants
+    try {
+      const fs019 = require('fs');
+      const path019 = require('path');
+      const migrationPath019 = path019.join(__dirname, '../database/migrations/019_communication_backbone.sql');
+      if (fs019.existsSync(migrationPath019)) {
+        const { pool: dbPool019 } = require('./config/pg-client');
+        const sql019 = fs019.readFileSync(migrationPath019, 'utf8');
+        await dbPool019.query(sql019);
+        logger.info('Migration 019: communication backbone schema applied');
+      }
+    } catch (m019Err: any) {
+      logger.warn('Migration 019 failed (non-fatal — tables/columns may already exist)', { error: m019Err.message });
+    }
+
     // Disable RLS on CRM tables (RLS with auth.uid() blocks backend service connections
     // because Azure PostgreSQL does not support the Supabase request.jwt.claim.sub GUC)
     try {
