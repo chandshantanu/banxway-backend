@@ -28,87 +28,121 @@ router.get('/dashboard', requirePermission(Permission.VIEW_ANALYTICS), async (re
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    // Run all queries in parallel — each wrapped in safeQuery so a missing table
-    // doesn't 500 the entire dashboard
+    // Use count-only queries instead of fetching all rows into memory
+    // Each query returns just a count, not the actual data
     const [
-      shipmentsResult,
-      threadsResult,
-      messageCountResult,
-      customerCountResult,
-      usersResult,
-      recentThreadsResult,
-      quotationsResult,
+      // Shipments
+      shipTotal, shipInTransit, shipPending, shipDelivered, shipExceptions,
+      // Threads
+      threadTotal, threadOpen, threadResolved, threadClosed,
+      threadHighPri, threadSlaBreach,
+      threadNewLeads, threadExistingCust, threadExistingShip, threadLinkedCrm,
+      // Channels
+      chEmail, chWhatsapp, chSms, chVoice, chPortal,
+      // Messages, customers, users
+      messageCountResult, customerCountResult, usersResult,
+      // Quotations, leads
+      quotTotal, quotDraft, quotSent, quotAccepted,
       crmLeadsResult,
     ] = await Promise.all([
-      safeQuery(supabaseAdmin.from('shipments').select('id, status')),
-      safeQuery(supabaseAdmin.from('communication_threads').select('id, status, priority, primary_channel, sla_status, lead_classification, crm_customer_id, created_at')),
-      safeQuery(supabaseAdmin.from('communication_messages').select('*', { count: 'exact' })),
-      safeQuery(supabaseAdmin.from('crm_customers').select('*', { count: 'exact' })),
+      // Shipment counts
+      safeQuery(supabaseAdmin.from('shipments').select('id', { count: 'exact' }).limit(0)),
+      safeQuery(supabaseAdmin.from('shipments').select('id', { count: 'exact' }).eq('status', 'IN_TRANSIT').limit(0)),
+      safeQuery(supabaseAdmin.from('shipments').select('id', { count: 'exact' }).in('status', ['DRAFT', 'PENDING', 'BOOKED']).limit(0)),
+      safeQuery(supabaseAdmin.from('shipments').select('id', { count: 'exact' }).eq('status', 'DELIVERED').limit(0)),
+      safeQuery(supabaseAdmin.from('shipments').select('id', { count: 'exact' }).eq('status', 'EXCEPTION').limit(0)),
+      // Thread counts
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).limit(0)),
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).in('status', ['NEW', 'IN_PROGRESS', 'AWAITING_CLIENT', 'AWAITING_INTERNAL']).limit(0)),
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('status', 'RESOLVED').limit(0)),
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('status', 'CLOSED').limit(0)),
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).in('priority', ['HIGH', 'URGENT', 'CRITICAL']).limit(0)),
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('sla_status', 'BREACHED').limit(0)),
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('lead_classification', 'new_lead').limit(0)),
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('lead_classification', 'existing_customer').limit(0)),
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('lead_classification', 'existing_shipment').limit(0)),
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).not('crm_customer_id', 'is', null).limit(0)),
+      // Channel counts
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('primary_channel', 'EMAIL').limit(0)),
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('primary_channel', 'WHATSAPP').limit(0)),
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('primary_channel', 'SMS').limit(0)),
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('primary_channel', 'VOICE').limit(0)),
+      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('primary_channel', 'PORTAL').limit(0)),
+      // Messages, customers, users
+      safeQuery(supabaseAdmin.from('communication_messages').select('id', { count: 'exact' }).limit(0)),
+      safeQuery(supabaseAdmin.from('crm_customers').select('id', { count: 'exact' }).limit(0)),
       safeQuery(supabaseAdmin.from('users').select('id, role, is_active')),
-      safeQuery(supabaseAdmin.from('communication_threads').select('created_at').gte('created_at', sevenDaysAgo.toISOString())),
-      safeQuery(supabaseAdmin.from('quotations').select('id, status', { count: 'exact' })),
-      safeQuery(supabaseAdmin.from('crm_customers').select('id').eq('status', 'LEAD')),
+      // Quotations
+      safeQuery(supabaseAdmin.from('quotations').select('id', { count: 'exact' }).limit(0)),
+      safeQuery(supabaseAdmin.from('quotations').select('id', { count: 'exact' }).eq('status', 'DRAFT').limit(0)),
+      safeQuery(supabaseAdmin.from('quotations').select('id', { count: 'exact' }).eq('status', 'SENT').limit(0)),
+      safeQuery(supabaseAdmin.from('quotations').select('id', { count: 'exact' }).eq('status', 'ACCEPTED').limit(0)),
+      // Leads
+      safeQuery(supabaseAdmin.from('crm_customers').select('id', { count: 'exact' }).eq('status', 'LEAD').limit(0)),
     ]);
 
-    const shipments = (shipmentsResult.data as any[]) || [];
-    const threads = (threadsResult.data as any[]) || [];
     const users = (usersResult.data as any[]) || [];
-    const recentThreads = (recentThreadsResult.data as any[]) || [];
-    const quotations = (quotationsResult.data as any[]) || [];
 
     const shipmentStats = {
-      total: shipments.length,
-      inTransit: shipments.filter(s => s.status === 'IN_TRANSIT').length,
-      pending: shipments.filter(s => ['DRAFT', 'PENDING', 'BOOKED'].includes(s.status)).length,
-      delivered: shipments.filter(s => s.status === 'DELIVERED').length,
-      exceptions: shipments.filter(s => s.status === 'EXCEPTION').length,
+      total: shipTotal.count,
+      inTransit: shipInTransit.count,
+      pending: shipPending.count,
+      delivered: shipDelivered.count,
+      exceptions: shipExceptions.count,
     };
 
     const threadStats = {
-      total: threads.length,
-      open: threads.filter(t => ['NEW', 'IN_PROGRESS', 'AWAITING_CLIENT', 'AWAITING_INTERNAL'].includes(t.status)).length,
-      resolved: threads.filter(t => t.status === 'RESOLVED').length,
-      closed: threads.filter(t => t.status === 'CLOSED').length,
-      highPriority: threads.filter(t => ['HIGH', 'URGENT', 'CRITICAL'].includes(t.priority)).length,
-      slaBreach: threads.filter(t => t.sla_status === 'BREACHED').length,
-      // New: lead classification breakdown
-      newLeads: threads.filter(t => t.lead_classification === 'new_lead').length,
-      existingCustomers: threads.filter(t => t.lead_classification === 'existing_customer').length,
-      existingShipments: threads.filter(t => t.lead_classification === 'existing_shipment').length,
-      linkedToCrm: threads.filter(t => t.crm_customer_id).length,
+      total: threadTotal.count,
+      open: threadOpen.count,
+      resolved: threadResolved.count,
+      closed: threadClosed.count,
+      highPriority: threadHighPri.count,
+      slaBreach: threadSlaBreach.count,
+      newLeads: threadNewLeads.count,
+      existingCustomers: threadExistingCust.count,
+      existingShipments: threadExistingShip.count,
+      linkedToCrm: threadLinkedCrm.count,
     };
 
     const channelBreakdown = {
-      email: threads.filter(t => t.primary_channel === 'EMAIL').length,
-      whatsapp: threads.filter(t => t.primary_channel === 'WHATSAPP').length,
-      sms: threads.filter(t => t.primary_channel === 'SMS').length,
-      voice: threads.filter(t => t.primary_channel === 'VOICE').length,
-      portal: threads.filter(t => t.primary_channel === 'PORTAL').length,
+      email: chEmail.count,
+      whatsapp: chWhatsapp.count,
+      sms: chSms.count,
+      voice: chVoice.count,
+      portal: chPortal.count,
     };
 
     const userStats = {
       total: users.length,
-      active: users.filter(u => u.is_active).length,
+      active: users.filter((u: any) => u.is_active).length,
       byRole: {
-        admin: users.filter(u => u.role === 'admin').length,
-        manager: users.filter(u => u.role === 'manager').length,
-        validator: users.filter(u => u.role === 'validator').length,
-        support: users.filter(u => u.role === 'support').length,
-        viewer: users.filter(u => u.role === 'viewer').length,
+        admin: users.filter((u: any) => u.role === 'admin').length,
+        manager: users.filter((u: any) => u.role === 'manager').length,
+        validator: users.filter((u: any) => u.role === 'validator').length,
+        support: users.filter((u: any) => u.role === 'support').length,
+        viewer: users.filter((u: any) => u.role === 'viewer').length,
       }
     };
 
-    // Group by day
-    const dailyTrend = Array.from({ length: 7 }, (_, i) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (6 - i));
-      const dateStr = date.toISOString().split('T')[0];
-      const count = recentThreads.filter(t => {
-        const ts = t.created_at instanceof Date ? t.created_at.toISOString() : String(t.created_at || '');
-        return ts.startsWith(dateStr);
-      }).length;
-      return { date: dateStr, count };
-    });
+    // Daily trend — use 7 individual count queries (one per day) instead of fetching all threads
+    const dailyTrend = await Promise.all(
+      Array.from({ length: 7 }, async (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - (6 - i));
+        const dateStr = date.toISOString().split('T')[0];
+        const nextDate = new Date(date);
+        nextDate.setDate(nextDate.getDate() + 1);
+        const nextDateStr = nextDate.toISOString().split('T')[0];
+        const result = await safeQuery(
+          supabaseAdmin.from('communication_threads')
+            .select('id', { count: 'exact' })
+            .gte('created_at', dateStr)
+            .lt('created_at', nextDateStr)
+            .limit(0)
+        );
+        return { date: dateStr, count: result.count };
+      })
+    );
 
     res.json({
       success: true,
@@ -118,12 +152,12 @@ router.get('/dashboard', requirePermission(Permission.VIEW_ANALYTICS), async (re
         channels: channelBreakdown,
         messages: { total: messageCountResult.count || 0 },
         customers: { total: customerCountResult.count || 0 },
-        leads: { total: (crmLeadsResult.data as any[])?.length || 0 },
+        leads: { total: crmLeadsResult.count || 0 },
         quotations: {
-          total: quotations.length,
-          draft: quotations.filter(q => q.status === 'DRAFT').length,
-          sent: quotations.filter(q => q.status === 'SENT').length,
-          accepted: quotations.filter(q => q.status === 'ACCEPTED').length,
+          total: quotTotal.count,
+          draft: quotDraft.count,
+          sent: quotSent.count,
+          accepted: quotAccepted.count,
         },
         users: userStats,
         trend: dailyTrend,
