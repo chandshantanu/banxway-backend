@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { authenticateRequest, requirePermission, AuthenticatedRequest } from '../../../middleware/auth.middleware';
 import { Permission } from '../../../utils/permissions';
 import { supabaseAdmin } from '../../../config/database.config';
+import { pool } from '../../../config/pg-client';
 import { logger } from '../../../utils/logger';
 import analyticsService from '../../../services/analytics.service';
 
@@ -28,88 +29,75 @@ router.get('/dashboard', requirePermission(Permission.VIEW_ANALYTICS), async (re
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    // Use count-only queries instead of fetching all rows into memory
-    // Each query returns just a count, not the actual data
-    const [
-      // Shipments
-      shipTotal, shipInTransit, shipPending, shipDelivered, shipExceptions,
-      // Threads
-      threadTotal, threadOpen, threadResolved, threadClosed,
-      threadHighPri, threadSlaBreach,
-      threadNewLeads, threadExistingCust, threadExistingShip, threadLinkedCrm,
-      // Channels
-      chEmail, chWhatsapp, chSms, chVoice, chPortal,
-      // Messages, customers, users
-      messageCountResult, customerCountResult, usersResult,
-      // Quotations, leads
-      quotTotal, quotDraft, quotSent, quotAccepted,
-      crmLeadsResult,
-    ] = await Promise.all([
-      // Shipment counts
-      safeQuery(supabaseAdmin.from('shipments').select('id', { count: 'exact' }).limit(0)),
-      safeQuery(supabaseAdmin.from('shipments').select('id', { count: 'exact' }).eq('status', 'IN_TRANSIT').limit(0)),
-      safeQuery(supabaseAdmin.from('shipments').select('id', { count: 'exact' }).in('status', ['DRAFT', 'PENDING', 'BOOKED']).limit(0)),
-      safeQuery(supabaseAdmin.from('shipments').select('id', { count: 'exact' }).eq('status', 'DELIVERED').limit(0)),
-      safeQuery(supabaseAdmin.from('shipments').select('id', { count: 'exact' }).eq('status', 'EXCEPTION').limit(0)),
-      // Thread counts
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).limit(0)),
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).in('status', ['NEW', 'IN_PROGRESS', 'AWAITING_CLIENT', 'AWAITING_INTERNAL']).limit(0)),
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('status', 'RESOLVED').limit(0)),
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('status', 'CLOSED').limit(0)),
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).in('priority', ['HIGH', 'URGENT', 'CRITICAL']).limit(0)),
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('sla_status', 'BREACHED').limit(0)),
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('lead_classification', 'new_lead').limit(0)),
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('lead_classification', 'existing_customer').limit(0)),
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('lead_classification', 'existing_shipment').limit(0)),
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).not('crm_customer_id', 'is', null).limit(0)),
-      // Channel counts
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('primary_channel', 'EMAIL').limit(0)),
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('primary_channel', 'WHATSAPP').limit(0)),
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('primary_channel', 'SMS').limit(0)),
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('primary_channel', 'VOICE').limit(0)),
-      safeQuery(supabaseAdmin.from('communication_threads').select('id', { count: 'exact' }).eq('primary_channel', 'PORTAL').limit(0)),
-      // Messages, customers, users
-      safeQuery(supabaseAdmin.from('communication_messages').select('id', { count: 'exact' }).limit(0)),
-      safeQuery(supabaseAdmin.from('crm_customers').select('id', { count: 'exact' }).limit(0)),
-      safeQuery(supabaseAdmin.from('users').select('id, role, is_active')),
-      // Quotations
-      safeQuery(supabaseAdmin.from('quotations').select('id', { count: 'exact' }).limit(0)),
-      safeQuery(supabaseAdmin.from('quotations').select('id', { count: 'exact' }).eq('status', 'DRAFT').limit(0)),
-      safeQuery(supabaseAdmin.from('quotations').select('id', { count: 'exact' }).eq('status', 'SENT').limit(0)),
-      safeQuery(supabaseAdmin.from('quotations').select('id', { count: 'exact' }).eq('status', 'ACCEPTED').limit(0)),
-      // Leads
-      safeQuery(supabaseAdmin.from('crm_customers').select('id', { count: 'exact' }).eq('status', 'LEAD').limit(0)),
-    ]);
+    // Single SQL query for ALL dashboard counts — uses 1 DB connection instead of 30+
+    const dashResult = await pool.query(`
+      SELECT
+        -- Thread counts
+        (SELECT COUNT(*) FROM communication_threads)::int AS thread_total,
+        (SELECT COUNT(*) FROM communication_threads WHERE status IN ('NEW','IN_PROGRESS','AWAITING_CLIENT','AWAITING_INTERNAL'))::int AS thread_open,
+        (SELECT COUNT(*) FROM communication_threads WHERE status = 'RESOLVED')::int AS thread_resolved,
+        (SELECT COUNT(*) FROM communication_threads WHERE status = 'CLOSED')::int AS thread_closed,
+        (SELECT COUNT(*) FROM communication_threads WHERE priority IN ('HIGH','URGENT','CRITICAL'))::int AS thread_high_pri,
+        (SELECT COUNT(*) FROM communication_threads WHERE sla_status = 'BREACHED')::int AS thread_sla_breach,
+        (SELECT COUNT(*) FROM communication_threads WHERE lead_classification = 'new_lead')::int AS thread_new_leads,
+        (SELECT COUNT(*) FROM communication_threads WHERE lead_classification = 'existing_customer')::int AS thread_existing_cust,
+        (SELECT COUNT(*) FROM communication_threads WHERE lead_classification = 'existing_shipment')::int AS thread_existing_ship,
+        (SELECT COUNT(*) FROM communication_threads WHERE crm_customer_id IS NOT NULL)::int AS thread_linked_crm,
+        -- Channel counts
+        (SELECT COUNT(*) FROM communication_threads WHERE primary_channel = 'EMAIL')::int AS ch_email,
+        (SELECT COUNT(*) FROM communication_threads WHERE primary_channel = 'WHATSAPP')::int AS ch_whatsapp,
+        (SELECT COUNT(*) FROM communication_threads WHERE primary_channel = 'SMS')::int AS ch_sms,
+        (SELECT COUNT(*) FROM communication_threads WHERE primary_channel = 'VOICE')::int AS ch_voice,
+        (SELECT COUNT(*) FROM communication_threads WHERE primary_channel = 'PORTAL')::int AS ch_portal,
+        -- Other counts
+        (SELECT COUNT(*) FROM communication_messages)::int AS message_total,
+        (SELECT COUNT(*) FROM crm_customers)::int AS customer_total,
+        (SELECT COUNT(*) FROM crm_customers WHERE status = 'LEAD')::int AS lead_total,
+        -- Shipment counts
+        (SELECT COUNT(*) FROM shipments)::int AS ship_total,
+        (SELECT COUNT(*) FROM shipments WHERE status = 'IN_TRANSIT')::int AS ship_in_transit,
+        (SELECT COUNT(*) FROM shipments WHERE status IN ('DRAFT','PENDING','BOOKED'))::int AS ship_pending,
+        (SELECT COUNT(*) FROM shipments WHERE status = 'DELIVERED')::int AS ship_delivered,
+        (SELECT COUNT(*) FROM shipments WHERE status = 'EXCEPTION')::int AS ship_exceptions,
+        -- Quotation counts
+        (SELECT COUNT(*) FROM quotations)::int AS quot_total,
+        (SELECT COUNT(*) FROM quotations WHERE status = 'DRAFT')::int AS quot_draft,
+        (SELECT COUNT(*) FROM quotations WHERE status = 'SENT')::int AS quot_sent,
+        (SELECT COUNT(*) FROM quotations WHERE status = 'ACCEPTED')::int AS quot_accepted
+    `);
+    const d = dashResult.rows[0] || {};
 
+    // Users — small table, fetch rows for role breakdown
+    const usersResult = await safeQuery(supabaseAdmin.from('users').select('id, role, is_active'));
     const users = (usersResult.data as any[]) || [];
 
     const shipmentStats = {
-      total: shipTotal.count,
-      inTransit: shipInTransit.count,
-      pending: shipPending.count,
-      delivered: shipDelivered.count,
-      exceptions: shipExceptions.count,
+      total: d.ship_total || 0,
+      inTransit: d.ship_in_transit || 0,
+      pending: d.ship_pending || 0,
+      delivered: d.ship_delivered || 0,
+      exceptions: d.ship_exceptions || 0,
     };
 
     const threadStats = {
-      total: threadTotal.count,
-      open: threadOpen.count,
-      resolved: threadResolved.count,
-      closed: threadClosed.count,
-      highPriority: threadHighPri.count,
-      slaBreach: threadSlaBreach.count,
-      newLeads: threadNewLeads.count,
-      existingCustomers: threadExistingCust.count,
-      existingShipments: threadExistingShip.count,
-      linkedToCrm: threadLinkedCrm.count,
+      total: d.thread_total || 0,
+      open: d.thread_open || 0,
+      resolved: d.thread_resolved || 0,
+      closed: d.thread_closed || 0,
+      highPriority: d.thread_high_pri || 0,
+      slaBreach: d.thread_sla_breach || 0,
+      newLeads: d.thread_new_leads || 0,
+      existingCustomers: d.thread_existing_cust || 0,
+      existingShipments: d.thread_existing_ship || 0,
+      linkedToCrm: d.thread_linked_crm || 0,
     };
 
     const channelBreakdown = {
-      email: chEmail.count,
-      whatsapp: chWhatsapp.count,
-      sms: chSms.count,
-      voice: chVoice.count,
-      portal: chPortal.count,
+      email: d.ch_email || 0,
+      whatsapp: d.ch_whatsapp || 0,
+      sms: d.ch_sms || 0,
+      voice: d.ch_voice || 0,
+      portal: d.ch_portal || 0,
     };
 
     const userStats = {
@@ -124,25 +112,21 @@ router.get('/dashboard', requirePermission(Permission.VIEW_ANALYTICS), async (re
       }
     };
 
-    // Daily trend — use 7 individual count queries (one per day) instead of fetching all threads
-    const dailyTrend = await Promise.all(
-      Array.from({ length: 7 }, async (_, i) => {
-        const date = new Date();
-        date.setDate(date.getDate() - (6 - i));
-        const dateStr = date.toISOString().split('T')[0];
-        const nextDate = new Date(date);
-        nextDate.setDate(nextDate.getDate() + 1);
-        const nextDateStr = nextDate.toISOString().split('T')[0];
-        const result = await safeQuery(
-          supabaseAdmin.from('communication_threads')
-            .select('id', { count: 'exact' })
-            .gte('created_at', dateStr)
-            .lt('created_at', nextDateStr)
-            .limit(0)
-        );
-        return { date: dateStr, count: result.count };
-      })
-    );
+    // Daily trend — single query with GROUP BY instead of 7 separate queries
+    const trendResult = await pool.query(`
+      SELECT created_at::date AS day, COUNT(*)::int AS count
+      FROM communication_threads
+      WHERE created_at >= NOW() - INTERVAL '7 days'
+      GROUP BY created_at::date
+      ORDER BY day
+    `);
+    const trendMap = new Map(trendResult.rows.map((r: any) => [r.day.toISOString().split('T')[0], r.count]));
+    const dailyTrend = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (6 - i));
+      const dateStr = date.toISOString().split('T')[0];
+      return { date: dateStr, count: trendMap.get(dateStr) || 0 };
+    });
 
     res.json({
       success: true,
@@ -150,14 +134,14 @@ router.get('/dashboard', requirePermission(Permission.VIEW_ANALYTICS), async (re
         shipments: shipmentStats,
         threads: threadStats,
         channels: channelBreakdown,
-        messages: { total: messageCountResult.count || 0 },
-        customers: { total: customerCountResult.count || 0 },
-        leads: { total: crmLeadsResult.count || 0 },
+        messages: { total: d.message_total || 0 },
+        customers: { total: d.customer_total || 0 },
+        leads: { total: d.lead_total || 0 },
         quotations: {
-          total: quotTotal.count,
-          draft: quotDraft.count,
-          sent: quotSent.count,
-          accepted: quotAccepted.count,
+          total: d.quot_total || 0,
+          draft: d.quot_draft || 0,
+          sent: d.quot_sent || 0,
+          accepted: d.quot_accepted || 0,
         },
         users: userStats,
         trend: dailyTrend,
