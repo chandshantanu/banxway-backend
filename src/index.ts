@@ -209,15 +209,62 @@ async function startServer() {
 
     // Migration 019: Communication backbone — entity types, pipeline stages, pending contacts, thread participants
     try {
-      const fs019 = require('fs');
-      const path019 = require('path');
-      const migrationPath019 = path019.join(__dirname, '../database/migrations/019_communication_backbone.sql');
-      if (fs019.existsSync(migrationPath019)) {
-        const { pool: dbPool019 } = require('./config/pg-client');
-        const sql019 = fs019.readFileSync(migrationPath019, 'utf8');
-        await dbPool019.query(sql019);
-        logger.info('Migration 019: communication backbone schema applied');
-      }
+      const { pool: dbPool019 } = require('./config/pg-client');
+      await dbPool019.query(`
+        ALTER TABLE crm_customers ADD COLUMN IF NOT EXISTS entity_type VARCHAR(50) DEFAULT 'CUSTOMER';
+        CREATE INDEX IF NOT EXISTS idx_crm_customers_entity_type ON crm_customers(entity_type);
+
+        ALTER TABLE communication_threads ADD COLUMN IF NOT EXISTS pipeline_stage VARCHAR(50);
+        ALTER TABLE communication_threads ADD COLUMN IF NOT EXISTS stage_changed_at TIMESTAMPTZ;
+        ALTER TABLE communication_threads ADD COLUMN IF NOT EXISTS stage_history JSONB DEFAULT '[]';
+        CREATE INDEX IF NOT EXISTS idx_threads_pipeline_stage ON communication_threads(pipeline_stage) WHERE pipeline_stage IS NOT NULL;
+
+        CREATE TABLE IF NOT EXISTS pending_contacts (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          email VARCHAR(255) NOT NULL,
+          name VARCHAR(255),
+          domain VARCHAR(255),
+          suggested_entity_type VARCHAR(50) DEFAULT 'CUSTOMER',
+          suggested_classification VARCHAR(50),
+          first_seen_thread_id UUID,
+          thread_count INTEGER DEFAULT 1,
+          first_seen_at TIMESTAMPTZ DEFAULT NOW(),
+          last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+          status VARCHAR(50) DEFAULT 'PENDING',
+          approved_by UUID,
+          approved_at TIMESTAMPTZ,
+          rejection_reason TEXT,
+          created_crm_customer_id UUID,
+          notes TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_pending_contacts_email ON pending_contacts(email);
+        CREATE INDEX IF NOT EXISTS idx_pending_contacts_status ON pending_contacts(status);
+        CREATE INDEX IF NOT EXISTS idx_pending_contacts_domain ON pending_contacts(domain);
+
+        CREATE TABLE IF NOT EXISTS thread_participants (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          thread_id UUID NOT NULL,
+          crm_customer_id UUID,
+          pending_contact_id UUID,
+          contact_email VARCHAR(255) NOT NULL,
+          contact_name VARCHAR(255),
+          role VARCHAR(50) DEFAULT 'PARTICIPANT',
+          entity_type VARCHAR(50),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(thread_id, contact_email)
+        );
+        CREATE INDEX IF NOT EXISTS idx_thread_participants_thread ON thread_participants(thread_id);
+        CREATE INDEX IF NOT EXISTS idx_thread_participants_email ON thread_participants(contact_email);
+        CREATE INDEX IF NOT EXISTS idx_thread_participants_crm ON thread_participants(crm_customer_id) WHERE crm_customer_id IS NOT NULL;
+
+        UPDATE crm_customers
+        SET lead_notes = 'LEGACY_AUTO_CREATED: ' || COALESCE(lead_notes, '')
+        WHERE lead_source = 'email_inbound'
+          AND (lead_notes IS NULL OR lead_notes NOT LIKE 'LEGACY_AUTO_CREATED%');
+      `);
+      logger.info('Migration 019: communication backbone schema applied');
     } catch (m019Err: any) {
       logger.warn('Migration 019 failed (non-fatal — tables/columns may already exist)', { error: m019Err.message });
     }
