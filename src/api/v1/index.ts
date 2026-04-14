@@ -28,6 +28,7 @@ import agentWebhooksRouter from './agent-webhooks';
 import validationRouter from './validation';
 import trackingRouter from './tracking';
 import outreachRouter from './outreach';
+import pendingContactsRouter from './pending-contacts';
 
 const router = Router();
 
@@ -59,6 +60,7 @@ router.use('/agent-webhooks', agentWebhooksRouter);
 router.use('/validation', validationRouter);
 router.use('/tracking', trackingRouter); // Public — no auth (email clients hit these)
 router.use('/outreach', outreachRouter);
+router.use('/pending-contacts', pendingContactsRouter);
 
 // Test endpoints (development only)
 if (process.env.NODE_ENV !== 'production') {
