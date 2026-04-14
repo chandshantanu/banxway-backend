@@ -70,9 +70,15 @@ class EmailTemplateService {
 
   async create(template: CreateTemplateRequest, userId?: string): Promise<EmailTemplate> {
     const { data, error } = await supabaseAdmin.from('email_templates').insert({
-      ...template,
-      variables: template.variables || [],
-      default_attachments: template.default_attachments || [],
+      name: template.name,
+      slug: template.slug,
+      category: template.category,
+      industry: template.industry || null,
+      subject_template: template.subject_template,
+      html_template: template.html_template,
+      text_template: template.text_template || null,
+      variables: JSON.stringify(template.variables || []),
+      default_attachments: JSON.stringify(template.default_attachments || []),
       created_by: userId || null,
     }).select().single();
     if (error) throw error;
