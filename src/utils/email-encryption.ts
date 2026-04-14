@@ -22,7 +22,14 @@ function getDatabaseUrl(): string {
 }
 
 /**
- * Encrypt a password using PostgreSQL function
+ * Get the encryption key from environment (falls back to legacy key for backward compat)
+ */
+function getEncryptionKey(): string {
+  return process.env.EMAIL_ENCRYPTION_KEY || 'banxway_email_key_prod_2024';
+}
+
+/**
+ * Encrypt a password using PostgreSQL function with key from env var
  */
 export async function encryptEmailPassword(password: string): Promise<string> {
   const DATABASE_URL = getDatabaseUrl();
@@ -38,8 +45,8 @@ export async function encryptEmailPassword(password: string): Promise<string> {
     await client.connect();
 
     const result = await client.query(
-      'SELECT encrypt_email_password($1) as encrypted',
-      [password]
+      'SELECT encrypt_email_password($1, $2) as encrypted',
+      [password, getEncryptionKey()]
     );
 
     return result.rows[0].encrypted;
@@ -54,7 +61,7 @@ export async function encryptEmailPassword(password: string): Promise<string> {
 }
 
 /**
- * Decrypt a password using PostgreSQL function
+ * Decrypt a password using PostgreSQL function with key from env var
  */
 export async function decryptEmailPassword(encrypted: string): Promise<string> {
   const DATABASE_URL = getDatabaseUrl();
@@ -70,8 +77,8 @@ export async function decryptEmailPassword(encrypted: string): Promise<string> {
     await client.connect();
 
     const result = await client.query(
-      'SELECT decrypt_email_password($1) as decrypted',
-      [encrypted]
+      'SELECT decrypt_email_password($1, $2) as decrypted',
+      [encrypted, getEncryptionKey()]
     );
 
     return result.rows[0].decrypted;

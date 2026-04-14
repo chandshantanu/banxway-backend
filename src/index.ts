@@ -269,6 +269,40 @@ async function startServer() {
       logger.warn('Migration 019 failed (non-fatal — tables/columns may already exist)', { error: m019Err.message });
     }
 
+    // Migration 020: Replace hardcoded encryption key with parameterized functions
+    try {
+      const { pool: dbPool020 } = require('./config/pg-client');
+      await dbPool020.query(`
+        CREATE OR REPLACE FUNCTION public.encrypt_email_password(password TEXT, key TEXT DEFAULT NULL)
+        RETURNS TEXT LANGUAGE plpgsql SECURITY DEFINER AS $$
+        DECLARE
+          encryption_key TEXT := COALESCE(key, current_setting('app.email_encryption_key', true), 'banxway_email_key_prod_2024');
+        BEGIN
+          RETURN encode(pgp_sym_encrypt(password, encryption_key), 'base64');
+        END;
+        $$;
+
+        CREATE OR REPLACE FUNCTION public.decrypt_email_password(encrypted TEXT, key TEXT DEFAULT NULL)
+        RETURNS TEXT LANGUAGE plpgsql SECURITY DEFINER AS $$
+        DECLARE
+          encryption_key TEXT := COALESCE(key, current_setting('app.email_encryption_key', true), 'banxway_email_key_prod_2024');
+        BEGIN
+          RETURN pgp_sym_decrypt(decode(encrypted, 'base64'), encryption_key);
+        END;
+        $$;
+      `);
+      // Set the session-level encryption key from env var
+      const envKey = process.env.EMAIL_ENCRYPTION_KEY;
+      if (envKey) {
+        await dbPool020.query(`SET app.email_encryption_key = '${envKey.replace(/'/g, "''")}'`);
+        logger.info('Migration 020: encryption functions upgraded, key from env var');
+      } else {
+        logger.info('Migration 020: encryption functions upgraded (using legacy fallback key — set EMAIL_ENCRYPTION_KEY env var)');
+      }
+    } catch (m020Err: any) {
+      logger.warn('Migration 020 failed (non-fatal)', { error: m020Err.message });
+    }
+
     // Disable RLS on CRM tables (RLS with auth.uid() blocks backend service connections
     // because Azure PostgreSQL does not support the Supabase request.jwt.claim.sub GUC)
     try {
