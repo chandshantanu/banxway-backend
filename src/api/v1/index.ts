@@ -26,6 +26,8 @@ import threadsRouter from './communications/threads';
 import agentsRouter from './agents';
 import agentWebhooksRouter from './agent-webhooks';
 import validationRouter from './validation';
+import trackingRouter from './tracking';
+import outreachRouter from './outreach';
 
 const router = Router();
 
@@ -55,6 +57,8 @@ router.use('/shipper-quote-requests', shipperQuoteRequestsRouter);
 router.use('/agents', agentsRouter);
 router.use('/agent-webhooks', agentWebhooksRouter);
 router.use('/validation', validationRouter);
+router.use('/tracking', trackingRouter); // Public — no auth (email clients hit these)
+router.use('/outreach', outreachRouter);
 
 // Test endpoints (development only)
 if (process.env.NODE_ENV !== 'production') {

@@ -303,6 +303,49 @@ async function startServer() {
       logger.warn('Migration 020 failed (non-fatal)', { error: m020Err.message });
     }
 
+    // Migration 021: Email tracking events + email templates tables
+    try {
+      const { pool: dbPool021 } = require('./config/pg-client');
+      await dbPool021.query(`
+        CREATE TABLE IF NOT EXISTS email_tracking_events (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          message_id UUID NOT NULL,
+          event_type VARCHAR(50) NOT NULL,
+          ip_address INET,
+          user_agent TEXT,
+          geo_city VARCHAR(100),
+          geo_country VARCHAR(100),
+          geo_region VARCHAR(100),
+          link_url TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_tracking_message ON email_tracking_events(message_id);
+        CREATE INDEX IF NOT EXISTS idx_tracking_type ON email_tracking_events(event_type);
+
+        CREATE TABLE IF NOT EXISTS email_templates (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name VARCHAR(255) NOT NULL,
+          slug VARCHAR(100) UNIQUE NOT NULL,
+          category VARCHAR(100) NOT NULL,
+          industry VARCHAR(100),
+          subject_template TEXT NOT NULL,
+          html_template TEXT NOT NULL,
+          text_template TEXT,
+          variables JSONB NOT NULL DEFAULT '[]',
+          default_attachments JSONB DEFAULT '[]',
+          is_active BOOLEAN DEFAULT TRUE,
+          created_by UUID,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_templates_category ON email_templates(category);
+        CREATE INDEX IF NOT EXISTS idx_templates_active ON email_templates(is_active) WHERE is_active = TRUE;
+      `);
+      logger.info('Migration 021: email tracking + templates tables created');
+    } catch (m021Err: any) {
+      logger.warn('Migration 021 failed (non-fatal)', { error: m021Err.message });
+    }
+
     // Disable RLS on CRM tables (RLS with auth.uid() blocks backend service connections
     // because Azure PostgreSQL does not support the Supabase request.jwt.claim.sub GUC)
     try {
